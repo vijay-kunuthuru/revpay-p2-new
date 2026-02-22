@@ -15,7 +15,7 @@ public class Transaction {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long transactionId;
+    private Long transactionId;  // Keep this as the primary key
 
     @ManyToOne
     @JoinColumn(name = "sender_id", nullable = true)
@@ -39,14 +39,14 @@ public class Transaction {
     @CreationTimestamp
     private LocalDateTime timestamp;
 
-    // --- ADDED THIS FOR AUDIT TRACKING ---
-    private String transactionRef;
+    @Column(unique = true)  // This is the transaction reference (not a primary key)
+    private String transactionRef;  // Renamed from 'id' to be clear
 
     public enum TransactionType {
-        SEND, REQUEST, ADD_FUNDS, WITHDRAW, INVOICE_PAYMENT
+        SEND, REQUEST, ADD_FUNDS, WITHDRAW, INVOICE_PAYMENT,LOAN_DISBURSEMENT,LOAN_REPAYMENT
     }
 
     public enum TransactionStatus {
-        PENDING, COMPLETED, FAILED, DECLINED
+        PENDING, COMPLETED, FAILED, DECLINED, CANCELLED
     }
 }

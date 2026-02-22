@@ -12,21 +12,20 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/notifications") // Added /api for consistency
-@CrossOrigin(origins = "*")           // Added for Angular integration
+@RequestMapping("/api/notifications")
+@CrossOrigin(origins = "*")
 public class NotificationController {
 
     @Autowired private NotificationService service;
     @Autowired private UserRepository userRepository;
 
-    // Helper to ensure users can only see their own data
     private User getAuthenticatedUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
     }
 
-    // SAFE: Fetch notifications for the CURRENT user only
+
     @GetMapping
     public ResponseEntity<List<Notification>> getMyNotifications() {
         User user = getAuthenticatedUser();
@@ -39,7 +38,6 @@ public class NotificationController {
         return ResponseEntity.ok("Notification marked as read");
     }
 
-    // Postman Test API (Updated to use Auth context)
     @PostMapping("/test")
     public ResponseEntity<String> testNotification() {
         User user = getAuthenticatedUser();
