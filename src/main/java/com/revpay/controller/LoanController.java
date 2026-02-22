@@ -5,7 +5,9 @@ import com.revpay.model.entity.Loan;
 import com.revpay.model.entity.LoanInstallment;
 import com.revpay.repository.UserRepository;
 import com.revpay.service.LoanService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,82 +22,82 @@ public class LoanController {
     private final LoanService loanService;
     private final UserRepository userRepository;
 
-    private Long getUserId(Authentication auth){
+    private Long getUserId(Authentication auth) {
         return userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new RuntimeException("User not found"))
                 .getUserId();
     }
 
     @PostMapping("/apply")
-    public LoanResponseDTO applyLoan(
-            @RequestBody LoanApplyDTO dto,
-            Authentication auth){
+    public ResponseEntity<LoanResponseDTO> applyLoan(
+            @Valid @RequestBody LoanApplyDTO dto,
+            Authentication auth) {
 
-        return loanService.applyLoan(getUserId(auth), dto);
+        return ResponseEntity.ok(loanService.applyLoan(getUserId(auth), dto));
     }
 
     @PostMapping("/repay")
-    public String repayLoan(
-            @RequestBody LoanRepayDTO dto,
-            Authentication auth){
+    public ResponseEntity<String> repayLoan(
+            @Valid @RequestBody LoanRepayDTO dto,
+            Authentication auth) {
 
-        return loanService.repayLoan(getUserId(auth), dto);
+        return ResponseEntity.ok(loanService.repayLoan(getUserId(auth), dto));
     }
 
     @GetMapping("/my")
-    public List<Loan> myLoans(Authentication auth){
-        return loanService.getUserLoans(getUserId(auth));
+    public ResponseEntity<List<Loan>> myLoans(Authentication auth) {
+        return ResponseEntity.ok(loanService.getUserLoans(getUserId(auth)));
     }
 
     @GetMapping("/outstanding")
-    public BigDecimal totalOutstanding(Authentication auth){
-        return loanService.totalOutstanding(Long.valueOf(auth.getName()));
+    public ResponseEntity<BigDecimal> totalOutstanding(Authentication auth) {
+        return ResponseEntity.ok(loanService.totalOutstanding(getUserId(auth)));
     }
 
     @GetMapping("/emi/{loanId}")
-    public List<LoanInstallment> viewEmiSchedule(
+    public ResponseEntity<List<LoanInstallment>> viewEmiSchedule(
             @PathVariable Long loanId,
-            Authentication auth){
+            Authentication auth) {
 
-        return loanService.getEmiSchedule(getUserId(auth), loanId);
+        return ResponseEntity.ok(loanService.getEmiSchedule(getUserId(auth), loanId));
     }
 
     @GetMapping("/overdue")
-    public List<LoanInstallment> getOverdues(Authentication auth){
-        return loanService.getOverdueEmis(getUserId(auth));
+    public ResponseEntity<List<LoanInstallment>> getOverdues(Authentication auth) {
+        return ResponseEntity.ok(loanService.getOverdueEmis(getUserId(auth)));
     }
 
     @GetMapping("/analytics")
-    public LoanAnalyticsDTO getAnalytics(Authentication auth){
-
+    public ResponseEntity<LoanAnalyticsDTO> getAnalytics(Authentication auth) {
         Long userId = getUserId(auth);
-
-        return LoanAnalyticsDTO.builder()
+        LoanAnalyticsDTO analytics = LoanAnalyticsDTO.builder()
                 .totalOutstanding(loanService.totalOutstanding(userId))
                 .totalPaid(loanService.totalPaid(userId))
                 .totalPending(loanService.totalPending(userId))
                 .build();
+        return ResponseEntity.ok(analytics);
     }
-    @PostMapping("/preclose/{loanId}")
-    public String preCloseLoan(
-            @PathVariable Long loanId,
-            Authentication auth){
 
-        return loanService.preCloseLoan(getUserId(auth), loanId);
+    @PostMapping("/preclose/{loanId}")
+    public ResponseEntity<String> preCloseLoan(
+            @PathVariable Long loanId,
+            Authentication auth) {
+
+        return ResponseEntity.ok(loanService.preCloseLoan(getUserId(auth), loanId));
     }
 
     @GetMapping("/credit-score")
-    public int getCreditScore(Authentication auth){
-        return loanService.calculateCreditScore(getUserId(auth));
+    public ResponseEntity<Integer> getCreditScore(Authentication auth) {
+        return ResponseEntity.ok(loanService.calculateCreditScore(getUserId(auth)));
     }
 
     @GetMapping("/eligibility")
-    public LoanEligibilityDTO checkEligibility(Authentication auth){
-        return loanService.checkEligibility(getUserId(auth));
+    public ResponseEntity<LoanEligibilityDTO> checkEligibility(Authentication auth) {
+        return ResponseEntity.ok(loanService.checkEligibility(getUserId(auth)));
     }
 
     @GetMapping("/recommendation")
-    public LoanRecommendationDTO getRecommendation(Authentication auth){
-        return loanService.getLoanRecommendation(getUserId(auth));
+    public ResponseEntity<LoanRecommendationDTO> getRecommendation(Authentication auth) {
+        return ResponseEntity.ok(loanService.getLoanRecommendation(getUserId(auth)));
     }
 }

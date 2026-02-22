@@ -3,7 +3,9 @@ package com.revpay.controller;
 import com.revpay.model.dto.LoanApprovalDTO;
 import com.revpay.model.entity.Loan;
 import com.revpay.service.LoanService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,13 +20,13 @@ public class LoanAdminController {
 
     @PostMapping("/approve")
     @PreAuthorize("hasRole('ADMIN')")
-    public String approveLoan(@RequestBody LoanApprovalDTO dto) {
-        return loanService.approveLoan(dto);
+    public ResponseEntity<String> approveLoan(@Valid @RequestBody LoanApprovalDTO dto) {
+        return ResponseEntity.ok(loanService.approveLoan(dto));
     }
 
     @GetMapping("/all")
     @PreAuthorize("hasRole('ADMIN')")
-    public List<Loan> getAllLoans(){
-        return loanService.getAllLoans();
+    public ResponseEntity<List<Loan>> getAllLoans() {
+        return ResponseEntity.ok(loanService.getAllLoans());
     }
 }
