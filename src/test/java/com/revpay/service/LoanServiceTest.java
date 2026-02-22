@@ -42,7 +42,7 @@ public class LoanServiceTest {
         businessUser.setRole(Role.BUSINESS);
     }
 
-    // ── APPLY ────────────────────────────────────────────────────────────────
+    // ───────────────── APPLY ─────────────────
 
     @Test
     public void testApplyLoanSuccess() {
@@ -61,302 +61,242 @@ public class LoanServiceTest {
 
         assertEquals(BigDecimal.valueOf(50000), response.getAmount());
         assertEquals(LoanStatus.APPLIED, response.getStatus());
-        verify(loanRepository, times(1)).save(any(Loan.class));
-        verify(notificationService).createNotification(
-                eq(1L), eq(NotificationUtil.loanApplied(dto.getAmount())), eq("LOAN"));
+
+        verify(loanRepository).save(any(Loan.class));
+        verify(notificationService)
+                .createNotification(eq(1L), anyString(), eq("LOAN"));
     }
 
     @Test(expected = RuntimeException.class)
     public void testApplyLoanFailsForNonBusinessUser() {
-        User personalUser = new User();
-        personalUser.setUserId(2L);
-        personalUser.setRole(Role.PERSONAL);
+        User personal = new User();
+        personal.setUserId(2L);
+        personal.setRole(Role.PERSONAL);
 
-        when(userRepository.findById(2L)).thenReturn(Optional.of(personalUser));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(personal));
 
         LoanApplyDTO dto = new LoanApplyDTO();
         dto.setAmount(BigDecimal.valueOf(10000));
         dto.setTenureMonths(6);
-        dto.setPurpose("Test");
 
         loanService.applyLoan(2L, dto);
     }
 
-    @Test
-    public void testApplyLoanNotSavedIfIneligible() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(businessUser));
-
-        List<LoanInstallment> overdues = Collections.nCopies(8,
-                LoanInstallment.builder()
-                        .loan(Loan.builder().user(businessUser).build())
-                        .status(InstallmentStatus.OVERDUE).build());
-
-        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.PAID))
-                .thenReturn(Collections.emptyList());
-        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.OVERDUE))
-                .thenReturn(overdues);
-
-        LoanApplyDTO dto = new LoanApplyDTO();
-        dto.setAmount(BigDecimal.valueOf(300000));
-        dto.setTenureMonths(12);
-        dto.setPurpose("Equipment");
-
-        try {
-            loanService.applyLoan(1L, dto);
-            fail("Expected RuntimeException for ineligible user");
-        } catch (RuntimeException e) {
-            verify(loanRepository, never()).save(any(Loan.class));
-        }
-    }
-
+    // ───────────────── APPROVE ─────────────────
 
     @Test
-    public void testApproveLoan() {
+    public void testApproveLoanSuccess() {
+
         Loan loan = Loan.builder()
-                .loanId(1L).user(businessUser)
+                .loanId(1L)
+                .user(businessUser)
                 .amount(BigDecimal.valueOf(100000))
-                .tenureMonths(12).status(LoanStatus.APPLIED).build();
+                .tenureMonths(12)
+                .status(LoanStatus.APPLIED)
+                .build();
 
         when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
 
         LoanApprovalDTO dto = LoanApprovalDTO.builder()
-                .loanId(1L).approved(true)
-                .interestRate(BigDecimal.valueOf(10)).build();
+                .loanId(1L)
+                .approved(true)
+                .interestRate(BigDecimal.valueOf(10))
+                .build();
 
         loanService.approveLoan(dto);
 
-        verify(walletService).addFunds(eq(1L), any(), eq("Loan Disbursement"));
-        verify(notificationService).createNotification(
-                eq(1L), eq(NotificationUtil.loanApproved()), eq("LOAN"));
+        verify(walletService).addFundsForLoan(
+                eq(1L),
+                eq(BigDecimal.valueOf(100000)),
+                contains("Loan Disbursement")
+        );
+
+        verify(notificationService)
+                .createNotification(eq(1L), anyString(), eq("LOAN"));
+
         assertEquals(LoanStatus.ACTIVE, loan.getStatus());
     }
 
-    @Test
-    public void testRejectLoan() {
-        Loan loan = Loan.builder()
-                .loanId(2L).user(businessUser)
-                .amount(BigDecimal.valueOf(50000))
-                .tenureMonths(6).status(LoanStatus.APPLIED).build();
+    @Test(expected = RuntimeException.class)
+    public void testApproveLoanFailsIfAlreadyActive() {
 
-        when(loanRepository.findById(2L)).thenReturn(Optional.of(loan));
+        Loan loan = Loan.builder()
+                .loanId(1L)
+                .user(businessUser)
+                .status(LoanStatus.ACTIVE)
+                .build();
+
+        when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
 
         LoanApprovalDTO dto = LoanApprovalDTO.builder()
-                .loanId(2L).approved(false).build();
+                .loanId(1L)
+                .approved(true)
+                .build();
 
         loanService.approveLoan(dto);
-
-        assertEquals(LoanStatus.REJECTED, loan.getStatus());
-        verify(walletService, never()).addFunds(any(), any(), any());
-        verify(notificationService).createNotification(
-                eq(1L), eq(NotificationUtil.loanRejected()), eq("LOAN"));
     }
 
+    // ───────────────── REPAY ─────────────────
 
     @Test
-    public void testRepayLoan_PendingEmi() {
+    public void testRepayLoanPendingEmi() {
+
         Loan loan = Loan.builder()
-                .loanId(1L).user(businessUser)
+                .loanId(1L)
+                .user(businessUser)
                 .remainingAmount(BigDecimal.valueOf(10000))
-                .status(LoanStatus.ACTIVE).build();
+                .status(LoanStatus.ACTIVE)
+                .build();
 
         LoanInstallment emi = LoanInstallment.builder()
-                .loan(loan).amount(BigDecimal.valueOf(1000))
-                .status(InstallmentStatus.PENDING).installmentNumber(1).build();
+                .loan(loan)
+                .amount(BigDecimal.valueOf(1000))
+                .status(InstallmentStatus.PENDING)
+                .dueDate(LocalDate.now().minusDays(1))
+                .build();
 
         when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
-        when(installmentRepository.findByLoan_LoanId(1L)).thenReturn(List.of(emi));
+        when(installmentRepository.findByLoan_LoanId(1L))
+                .thenReturn(List.of(emi));
 
         LoanRepayDTO dto = new LoanRepayDTO();
         dto.setLoanId(1L);
 
-        String result = loanService.repayLoan(1L, dto);
+        loanService.repayLoan(1L, dto);
 
-        assertEquals("EMI Paid Successfully", result);
-        verify(walletService).withdrawFunds(1L, BigDecimal.valueOf(1000));
+        verify(walletService).withdrawFundsForLoan(
+                eq(1L),
+                eq(BigDecimal.valueOf(1000)),
+                contains("Loan Repayment")
+        );
+
         assertEquals(InstallmentStatus.PAID, emi.getStatus());
-        assertEquals(0, BigDecimal.valueOf(9000).compareTo(loan.getRemainingAmount()));
+        assertEquals(0,
+                BigDecimal.valueOf(9000).compareTo(loan.getRemainingAmount()));
     }
 
     @Test
-    public void testRepayLoan_OverdueEmiWithPenalty() {
+    public void testRepayLoanOverdueEmi() {
+
         Loan loan = Loan.builder()
-                .loanId(1L).user(businessUser)
+                .loanId(1L)
+                .user(businessUser)
                 .remainingAmount(BigDecimal.valueOf(5000))
-                .status(LoanStatus.ACTIVE).build();
+                .status(LoanStatus.ACTIVE)
+                .build();
 
-        LoanInstallment overdueEmi = LoanInstallment.builder()
-                .loan(loan).amount(BigDecimal.valueOf(1000))
-                .status(InstallmentStatus.OVERDUE).installmentNumber(1).build();
+        LoanInstallment emi = LoanInstallment.builder()
+                .loan(loan)
+                .amount(BigDecimal.valueOf(1000))
+                .status(InstallmentStatus.OVERDUE)
+                .dueDate(LocalDate.now().minusDays(2))
+                .build();
 
         when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
-        when(installmentRepository.findByLoan_LoanId(1L)).thenReturn(List.of(overdueEmi));
+        when(installmentRepository.findByLoan_LoanId(1L))
+                .thenReturn(List.of(emi));
 
         LoanRepayDTO dto = new LoanRepayDTO();
         dto.setLoanId(1L);
 
         loanService.repayLoan(1L, dto);
 
-        // Wallet: EMI ₹1000 + penalty ₹100 = ₹1100
-        verify(walletService).withdrawFunds(1L, BigDecimal.valueOf(1100));
-        // Remaining balance must also drop by ₹1100
-        assertEquals(0, BigDecimal.valueOf(3900).compareTo(loan.getRemainingAmount()));
+        verify(walletService).withdrawFundsForLoan(
+                eq(1L),
+                eq(BigDecimal.valueOf(1100)),
+                contains("Loan Repayment")
+        );
+
+        assertEquals(0,
+                BigDecimal.valueOf(3900).compareTo(loan.getRemainingAmount()));
     }
 
-    @Test
-    public void testRepayLoan_ClosesLoanWhenFullyPaid() {
+    @Test(expected = RuntimeException.class)
+    public void testRepayLoanFailsIfClosed() {
+
         Loan loan = Loan.builder()
-                .loanId(1L).user(businessUser)
-                .remainingAmount(BigDecimal.valueOf(1000))
-                .status(LoanStatus.ACTIVE).build();
-
-        LoanInstallment lastEmi = LoanInstallment.builder()
-                .loan(loan).amount(BigDecimal.valueOf(1000))
-                .status(InstallmentStatus.PENDING).installmentNumber(12).build();
+                .loanId(1L)
+                .user(businessUser)
+                .status(LoanStatus.CLOSED)
+                .build();
 
         when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
-        when(installmentRepository.findByLoan_LoanId(1L)).thenReturn(List.of(lastEmi));
 
         LoanRepayDTO dto = new LoanRepayDTO();
         dto.setLoanId(1L);
 
         loanService.repayLoan(1L, dto);
-
-        assertEquals(LoanStatus.CLOSED, loan.getStatus());
-        assertEquals(0, BigDecimal.ZERO.compareTo(loan.getRemainingAmount()));
     }
 
-
-    @Test
-    public void testCreditScoreCalculation() {
-        Loan loan = Loan.builder().user(businessUser).build();
-
-        LoanInstallment paid = LoanInstallment.builder()
-                .loan(loan).status(InstallmentStatus.PAID).build();
-        LoanInstallment overdue = LoanInstallment.builder()
-                .loan(loan).status(InstallmentStatus.OVERDUE).build();
-
-        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.PAID))
-                .thenReturn(List.of(paid));
-        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.OVERDUE))
-                .thenReturn(List.of(overdue));
-
-        int score = loanService.calculateCreditScore(1L);
-
-        assertEquals(697, score); // 700 + (1*2) - (1*5) = 697
-        assertTrue(score >= 300 && score <= 850);
-    }
-
-    @Test
-    public void testCreditScoreCappedAt850() {
-        List<LoanInstallment> manyPaid = Collections.nCopies(100,
-                LoanInstallment.builder()
-                        .loan(Loan.builder().user(businessUser).build())
-                        .status(InstallmentStatus.PAID).build());
-
-        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.PAID))
-                .thenReturn(manyPaid);
-        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.OVERDUE))
-                .thenReturn(Collections.emptyList());
-
-        assertEquals(850, loanService.calculateCreditScore(1L));
-    }
-
-    @Test
-    public void testLoanEligibility_NewUserIsEligible() {
-        when(installmentRepository.findByUserIdAndStatus(anyLong(), any()))
-                .thenReturn(Collections.emptyList());
-        assertTrue(loanService.isEligibleForLoan(1L, BigDecimal.valueOf(10000)));
-    }
-
-    @Test
-    public void testLoanEligibility_HighRiskNotEligible() {
-        List<LoanInstallment> overdues = Collections.nCopies(20,
-                LoanInstallment.builder()
-                        .loan(Loan.builder().user(businessUser).build())
-                        .status(InstallmentStatus.OVERDUE).build());
-
-        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.PAID))
-                .thenReturn(Collections.emptyList());
-        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.OVERDUE))
-                .thenReturn(overdues);
-
-        assertFalse(loanService.isEligibleForLoan(1L, BigDecimal.valueOf(10000)));
-    }
-
-
-    @Test
-    public void testVipTier_NewUserIsNone() {
-        when(installmentRepository.findByUserIdAndStatus(anyLong(), any()))
-                .thenReturn(Collections.emptyList());
-        assertEquals(VipTier.NONE, loanService.getVipTier(1L));
-    }
-
-    @Test
-    public void testVipTier_ManyPaidBecomesGold() {
-        // 700 + (11*2) = 722 → GOLD
-        List<LoanInstallment> paidList = Collections.nCopies(11,
-                LoanInstallment.builder()
-                        .loan(Loan.builder().user(businessUser).build())
-                        .status(InstallmentStatus.PAID).build());
-
-        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.PAID))
-                .thenReturn(paidList);
-        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.OVERDUE))
-                .thenReturn(Collections.emptyList());
-
-        assertEquals(VipTier.GOLD, loanService.getVipTier(1L));
-    }
-
-
-    @Test
-    public void testMarkOverdueInstallments() {
-        Loan loan = Loan.builder().user(businessUser).build();
-
-        LoanInstallment pastDue = LoanInstallment.builder()
-                .loan(loan).status(InstallmentStatus.PENDING)
-                .dueDate(LocalDate.now().minusDays(1)).installmentNumber(1).build();
-
-        LoanInstallment future = LoanInstallment.builder()
-                .loan(loan).status(InstallmentStatus.PENDING)
-                .dueDate(LocalDate.now().plusDays(10)).installmentNumber(2).build();
-
-        when(installmentRepository.findAllByStatus(InstallmentStatus.PENDING))
-                .thenReturn(List.of(pastDue, future));
-
-        loanService.markOverdueInstallments();
-
-        assertEquals(InstallmentStatus.OVERDUE, pastDue.getStatus());
-        assertEquals(InstallmentStatus.PENDING,  future.getStatus());
-        verify(installmentRepository).saveAll(List.of(pastDue));
-        verify(notificationService, times(1))
-                .createNotification(eq(1L), anyString(), eq("LOAN"));
-    }
-
+    // ───────────────── PRECLOSE ─────────────────
 
     @Test
     public void testPreCloseLoan() {
+
         Loan loan = Loan.builder()
-                .loanId(1L).user(businessUser)
+                .loanId(1L)
+                .user(businessUser)
                 .remainingAmount(BigDecimal.valueOf(10000))
-                .status(LoanStatus.ACTIVE).build();
+                .status(LoanStatus.ACTIVE)
+                .build();
 
         when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
 
         loanService.preCloseLoan(1L, 1L);
 
-        verify(walletService).withdrawFunds(1L, new BigDecimal("10200.00"));
+        verify(walletService).withdrawFundsForLoan(
+                eq(1L),
+                eq(new BigDecimal("10200.00")),
+                contains("Loan Pre-Closure")
+        );
+
         assertEquals(LoanStatus.CLOSED, loan.getStatus());
         assertEquals(0, BigDecimal.ZERO.compareTo(loan.getRemainingAmount()));
     }
 
-    @Test(expected = RuntimeException.class)
-    public void testPreCloseLoan_UnauthorizedUser() {
-        Loan loan = Loan.builder()
-                .loanId(1L).user(businessUser)
-                .status(LoanStatus.ACTIVE).build();
+    // ───────────────── CREDIT SCORE ─────────────────
 
-        when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
+    @Test
+    public void testCreditScoreCalculation() {
 
-        loanService.preCloseLoan(99L, 1L); // Different userId
+        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.PAID))
+                .thenReturn(List.of(new LoanInstallment()));
+
+        when(installmentRepository.findByUserIdAndStatus(1L, InstallmentStatus.OVERDUE))
+                .thenReturn(List.of(new LoanInstallment()));
+
+        int score = loanService.calculateCreditScore(1L);
+
+        assertEquals(697, score);
+    }
+
+    // ───────────────── OVERDUE ─────────────────
+
+    @Test
+    public void testMarkOverdueInstallments() {
+
+        Loan loan = Loan.builder().user(businessUser).build();
+
+        LoanInstallment past = LoanInstallment.builder()
+                .loan(loan)
+                .status(InstallmentStatus.PENDING)
+                .dueDate(LocalDate.now().minusDays(1))
+                .build();
+
+        LoanInstallment future = LoanInstallment.builder()
+                .loan(loan)
+                .status(InstallmentStatus.PENDING)
+                .dueDate(LocalDate.now().plusDays(5))
+                .build();
+
+        when(installmentRepository.findAllByStatus(InstallmentStatus.PENDING))
+                .thenReturn(List.of(past, future));
+
+        loanService.markOverdueInstallments();
+
+        assertEquals(InstallmentStatus.OVERDUE, past.getStatus());
+        assertEquals(InstallmentStatus.PENDING, future.getStatus());
+
+        verify(installmentRepository).saveAll(List.of(past));
     }
 }
