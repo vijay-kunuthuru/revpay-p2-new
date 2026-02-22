@@ -1,53 +1,56 @@
 package com.revpay.controller;
 
+import com.revpay.model.dto.ApiResponse;
 import com.revpay.model.dto.JwtResponse;
 import com.revpay.model.dto.LoginRequest;
 import com.revpay.model.dto.SignupRequest;
-import com.revpay.model.entity.User;
-import com.revpay.model.entity.Wallet;
-import com.revpay.repository.UserRepository;
-import com.revpay.repository.WalletRepository;
 import com.revpay.security.JwtUtils;
 import com.revpay.security.UserDetailsImpl;
+import com.revpay.service.AuthService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.util.Collections;
+import java.util.Collection;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class AuthControllerTest {
+public class AuthControllerTest {
 
     @Mock
     private AuthenticationManager authenticationManager;
 
     @Mock
-    private UserRepository userRepository;
-
-    @Mock
-    private PasswordEncoder encoder;
-
-    @Mock
     private JwtUtils jwtUtils;
 
     @Mock
-    private WalletRepository walletRepository;
+    private AuthService authService;
 
     @InjectMocks
     private AuthController authController;
+
+    @BeforeEach
+    void setUp() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void authenticateUserSuccess() {
@@ -56,65 +59,32 @@ class AuthControllerTest {
         loginRequest.setPassword("password");
 
         Authentication authentication = mock(Authentication.class);
-        UserDetailsImpl userDetails = new UserDetailsImpl(
-                1L,
-                "test@revpay.com",
-                "password",
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_PERSONAL"))
-        );
-
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+
+        Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_PERSONAL"));
+        UserDetailsImpl userDetails = new UserDetailsImpl(1L, "test@revpay.com", "password", authorities);
         when(authentication.getPrincipal()).thenReturn(userDetails);
-        when(jwtUtils.generateTokenFromUsername("test@revpay.com")).thenReturn("mockedJwtToken");
 
-        ResponseEntity<?> response = authController.authenticateUser(loginRequest);
+        when(jwtUtils.generateTokenFromUsername("test@revpay.com")).thenReturn("mock-jwt-token");
 
-        assertEquals(200, response.getStatusCodeValue());
-        JwtResponse jwtResponse = (JwtResponse) response.getBody();
-        assertNotNull(jwtResponse);
-        assertEquals("mockedJwtToken", jwtResponse.getToken());
-        assertEquals("test@revpay.com", jwtResponse.getEmail());
-        assertEquals("ROLE_PERSONAL", jwtResponse.getRole());
+        ResponseEntity<ApiResponse<JwtResponse>> response = authController.authenticateUser(loginRequest);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().isSuccess());
+        assertEquals("mock-jwt-token", response.getBody().getData().getToken());
     }
 
     @Test
     void registerUserSuccess() {
         SignupRequest signupRequest = new SignupRequest();
         signupRequest.setEmail("new@revpay.com");
-        signupRequest.setPhoneNumber("1234567890");
-        signupRequest.setPassword("password");
-        signupRequest.setTransactionPin("1234");
-        signupRequest.setFullName("Test User");
-        signupRequest.setRole("personal");
 
-        when(userRepository.existsByEmail("new@revpay.com")).thenReturn(false);
-        when(userRepository.existsByPhoneNumber("1234567890")).thenReturn(false);
+        doNothing().when(authService).registerUser(any(SignupRequest.class));
 
-        User savedUser = new User();
-        savedUser.setUserId(1L);
-        when(userRepository.save(any(User.class))).thenReturn(savedUser);
+        ResponseEntity<ApiResponse<String>> response = authController.registerUser(signupRequest);
 
-        // We only use this one broad mock to prevent UnnecessaryStubbingException
-        when(encoder.encode(any())).thenReturn("encodedHash");
-
-        ResponseEntity<?> response = authController.registerUser(signupRequest);
-
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals("User registered successfully!", response.getBody());
-
-        verify(walletRepository, times(1)).save(any(Wallet.class));
-    }
-
-    @Test
-    void registerUserEmailExists() {
-        SignupRequest signupRequest = new SignupRequest();
-        signupRequest.setEmail("existing@revpay.com");
-
-        when(userRepository.existsByEmail("existing@revpay.com")).thenReturn(true);
-
-        ResponseEntity<?> response = authController.registerUser(signupRequest);
-
-        assertEquals(400, response.getStatusCodeValue());
-        assertEquals("Error: Email is already in use!", response.getBody());
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().isSuccess());
+        assertEquals("User registered successfully!", response.getBody().getMessage());
     }
 }

@@ -1,47 +1,44 @@
 package com.revpay.controller;
 
+import com.revpay.model.dto.ApiResponse;
+import com.revpay.model.dto.ForgotPasswordRequest;
 import com.revpay.model.dto.JwtResponse;
 import com.revpay.model.dto.LoginRequest;
+import com.revpay.model.dto.ResetPasswordRequest;
 import com.revpay.model.dto.SignupRequest;
-import com.revpay.model.entity.Role;
-import com.revpay.model.entity.User;
-import com.revpay.model.entity.Wallet;
-import com.revpay.repository.UserRepository;
-import com.revpay.repository.WalletRepository;
+import com.revpay.model.dto.UpdatePasswordRequest;
 import com.revpay.security.JwtUtils;
 import com.revpay.security.UserDetailsImpl;
+import com.revpay.service.AuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 public class AuthController {
 
     @Autowired
     private AuthenticationManager authenticationManager;
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private WalletRepository walletRepository;
-
-    @Autowired
-    private PasswordEncoder encoder;
-
-    @Autowired
     private JwtUtils jwtUtils;
 
+    @Autowired
+    private AuthService authService;
+
+    private Long getAuthenticatedUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        return userDetails.getUserId();
+    }
+
     @PostMapping("/login")
-    public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<ApiResponse<JwtResponse>> authenticateUser(@RequestBody LoginRequest loginRequest) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
 
@@ -51,52 +48,32 @@ public class AuthController {
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
         String role = userDetails.getAuthorities().iterator().next().getAuthority();
 
-        return ResponseEntity.ok(new JwtResponse(jwt, userDetails.getUserId(), userDetails.getEmail(), role));
+        JwtResponse jwtResponse = new JwtResponse(jwt, userDetails.getUserId(), userDetails.getEmail(), role);
+        return ResponseEntity.ok(ApiResponse.success(jwtResponse, "Login successful"));
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@RequestBody SignupRequest signUpRequest) {
-        if (userRepository.existsByEmail(signUpRequest.getEmail())) {
-            return ResponseEntity.badRequest().body("Error: Email is already in use!");
-        }
+    public ResponseEntity<ApiResponse<String>> registerUser(@RequestBody SignupRequest signUpRequest) {
+        authService.registerUser(signUpRequest);
+        return ResponseEntity.ok(ApiResponse.success(null, "User registered successfully!"));
+    }
 
-        if (userRepository.existsByPhoneNumber(signUpRequest.getPhoneNumber())) {
-            return ResponseEntity.badRequest().body("Error: Phone number is already in use!");
-        }
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<String>> getSecurityQuestion(@RequestBody ForgotPasswordRequest request) {
+        String question = authService.getSecurityQuestion(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.success(question, "Security question retrieved successfully"));
+    }
 
-        User user = new User();
-        user.setEmail(signUpRequest.getEmail());
-        user.setPhoneNumber(signUpRequest.getPhoneNumber());
-        user.setPasswordHash(encoder.encode(signUpRequest.getPassword()));
-        user.setTransactionPinHash(encoder.encode(signUpRequest.getTransactionPin()));
-        user.setFullName(signUpRequest.getFullName());
-        user.setSecurityQuestion(signUpRequest.getSecurityQuestion());
-        user.setSecurityAnswerHash(encoder.encode(signUpRequest.getSecurityAnswer()));
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<String>> resetPassword(@RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(null, "Password has been reset successfully"));
+    }
 
-        String strRole = signUpRequest.getRole();
-        if (strRole == null) {
-            user.setRole(Role.PERSONAL);
-        } else {
-            switch (strRole.toLowerCase()) {
-                case "admin":
-                    user.setRole(Role.ADMIN);
-                    break;
-                case "business":
-                    user.setRole(Role.BUSINESS);
-                    break;
-                default:
-                    user.setRole(Role.PERSONAL);
-            }
-        }
-
-        User savedUser = userRepository.save(user);
-
-        Wallet wallet = new Wallet();
-        wallet.setUser(savedUser);
-        wallet.setBalance(BigDecimal.ZERO);
-        wallet.setCurrency("INR");
-        walletRepository.save(wallet);
-
-        return ResponseEntity.ok("User registered successfully!");
+    @PutMapping("/update-password")
+    public ResponseEntity<ApiResponse<String>> updatePassword(@RequestBody UpdatePasswordRequest request) {
+        Long currentUserId = getAuthenticatedUserId();
+        authService.updatePassword(currentUserId, request);
+        return ResponseEntity.ok(ApiResponse.success(null, "Password updated successfully"));
     }
 }

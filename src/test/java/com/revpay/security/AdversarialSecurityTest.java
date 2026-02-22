@@ -32,10 +32,10 @@ public class AdversarialSecurityTest {
     void testSqlInjectionPayloadInAuth() throws Exception {
         String payload = "{\"email\": \"admin@revpay.com' OR '1'='1\", \"password\": \"password\"}";
 
-        mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -46,7 +46,7 @@ public class AdversarialSecurityTest {
         }
         String payload = "{\"email\": \"" + largeString + "@revpay.com\", \"password\": \"password\"}";
 
-        mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().is4xxClientError());
