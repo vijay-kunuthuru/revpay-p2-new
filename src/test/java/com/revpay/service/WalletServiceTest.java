@@ -1,4 +1,4 @@
-package com.revpay;
+package com.revpay.service;
 
 import com.revpay.model.dto.TransactionRequest;
 import com.revpay.model.dto.WalletAnalyticsDTO;  // Add this import

@@ -14,7 +14,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 public class Wallet {
 
     @Id
-    private Long userId; // Matches the User's ID
+    private Long userId;
 
     @OneToOne
     @MapsId
@@ -29,4 +29,7 @@ public class Wallet {
 
     @UpdateTimestamp
     private LocalDateTime lastUpdated;
+
+    @Version
+    private Long version;
 }

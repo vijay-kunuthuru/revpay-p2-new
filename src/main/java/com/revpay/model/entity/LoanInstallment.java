@@ -12,6 +12,7 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Table(name = "loan_installments")
 public class LoanInstallment {
 
     @Id
@@ -23,9 +24,10 @@ public class LoanInstallment {
     private LocalDate dueDate;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private InstallmentStatus status;
 
-    @ManyToOne
-    @JoinColumn(name = "loan_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "loan_id", nullable = false)
     private Loan loan;
 }
