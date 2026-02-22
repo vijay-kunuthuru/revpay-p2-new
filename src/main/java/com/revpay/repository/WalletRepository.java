@@ -2,11 +2,20 @@ package com.revpay.repository;
 
 import com.revpay.model.entity.User;
 import com.revpay.model.entity.Wallet;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 public interface WalletRepository extends JpaRepository<Wallet, Long> {
-    // This finds the wallet based on the User's ID property
+
     Optional<Wallet> findByUserUserId(Long userId);
+
     Optional<Wallet> findByUser(User user);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT w FROM Wallet w WHERE w.user.userId = :userId")
+    Optional<Wallet> findByUserUserIdForUpdate(@Param("userId") Long userId);
 }

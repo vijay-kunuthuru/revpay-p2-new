@@ -3,7 +3,6 @@ package com.revpay;
 import com.revpay.model.dto.TransactionRequest;
 import com.revpay.model.entity.*;
 import com.revpay.repository.*;
-import com.revpay.service.NotificationService;
 import com.revpay.service.WalletService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.math.BigDecimal;
@@ -27,7 +27,7 @@ public class WalletServiceTest {
     @Mock private TransactionRepository transRepo;
     @Mock private UserRepository userRepo;
     @Mock private PasswordEncoder encoder;
-    @Mock private NotificationService notificationService; // Added to prevent NPEs during notifications
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private WalletService walletService;
@@ -41,7 +41,7 @@ public class WalletServiceTest {
         sender.setUserId(1L);
         sender.setEmail("sender@revpay.com");
         sender.setTransactionPinHash("hashed_1234");
-        sender.setFullName("Sender Name"); // Added to prevent NPE in notification text
+        sender.setFullName("Sender Name");
 
         senderWallet = new Wallet();
         senderWallet.setBalance(new BigDecimal("1000.00"));
@@ -54,7 +54,7 @@ public class WalletServiceTest {
         User receiver = new User();
         receiver.setUserId(2L);
         receiver.setEmail("receiver@mail.com");
-        receiver.setFullName("Receiver Name"); // Added for notification
+        receiver.setFullName("Receiver Name");
 
         Wallet receiverWallet = new Wallet();
         receiverWallet.setBalance(new BigDecimal("50.00"));
@@ -64,11 +64,10 @@ public class WalletServiceTest {
         when(userRepo.findByEmail("receiver@mail.com")).thenReturn(Optional.of(receiver));
         when(encoder.matches("1234", sender.getTransactionPinHash())).thenReturn(true);
 
-        // Updated mock method name to perfectly match findByUserUserId
         lenient().when(walletRepo.findById(1L)).thenReturn(Optional.of(senderWallet));
         lenient().when(walletRepo.findById(2L)).thenReturn(Optional.of(receiverWallet));
-        lenient().when(walletRepo.findByUserUserId(1L)).thenReturn(Optional.of(senderWallet));
-        lenient().when(walletRepo.findByUserUserId(2L)).thenReturn(Optional.of(receiverWallet));
+        lenient().when(walletRepo.findByUserUserIdForUpdate(1L)).thenReturn(Optional.of(senderWallet));
+        lenient().when(walletRepo.findByUserUserIdForUpdate(2L)).thenReturn(Optional.of(receiverWallet));
 
         when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
 
@@ -80,7 +79,7 @@ public class WalletServiceTest {
         assertEquals(new BigDecimal("250.00"), receiverWallet.getBalance());
         assertNotNull(result);
         verify(walletRepo, times(2)).save(any(Wallet.class));
-        verify(notificationService, times(2)).createNotification(anyLong(), anyString(), anyString()); // Verify notifications sent
+        verify(eventPublisher, times(1)).publishEvent(any(Object.class));
     }
 
     @Test
@@ -105,11 +104,10 @@ public class WalletServiceTest {
         when(userRepo.findByEmail("r@mail.com")).thenReturn(Optional.of(receiver));
         when(encoder.matches("1234", sender.getTransactionPinHash())).thenReturn(true);
 
-        // Updated mock method name to perfectly match findByUserUserId
         lenient().when(walletRepo.findById(1L)).thenReturn(Optional.of(senderWallet));
         lenient().when(walletRepo.findById(2L)).thenReturn(Optional.of(new Wallet()));
-        lenient().when(walletRepo.findByUserUserId(1L)).thenReturn(Optional.of(senderWallet));
-        lenient().when(walletRepo.findByUserUserId(2L)).thenReturn(Optional.of(new Wallet()));
+        lenient().when(walletRepo.findByUserUserIdForUpdate(1L)).thenReturn(Optional.of(senderWallet));
+        lenient().when(walletRepo.findByUserUserIdForUpdate(2L)).thenReturn(Optional.of(new Wallet()));
 
         when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
 
@@ -127,20 +125,18 @@ public class WalletServiceTest {
         when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any())).thenReturn(new ArrayList<>());
 
         RuntimeException ex = assertThrows(RuntimeException.class, () -> walletService.sendMoney(1L, req));
-        assertTrue(ex.getMessage().contains("limit of ₹50,000 exceeded"));
+        assertTrue(ex.getMessage().contains("limit of INR50,000 exceeded"));
     }
 
     @Test
     void testTransactionReference_Format() {
-        // Updated mock method name to perfectly match findByUserUserId
         lenient().when(walletRepo.findById(1L)).thenReturn(Optional.of(senderWallet));
-        lenient().when(walletRepo.findByUserUserId(1L)).thenReturn(Optional.of(senderWallet));
+        lenient().when(walletRepo.findByUserUserIdForUpdate(1L)).thenReturn(Optional.of(senderWallet));
         when(transRepo.save(any())).thenAnswer(invocation -> invocation.getArguments()[0]);
 
         Transaction result = walletService.addFunds(1L, new BigDecimal("100.00"), "Bonus");
 
         assertNotNull(result.getTransactionRef());
-        assertTrue(result.getTransactionRef().startsWith("TXN-"), "Ref should start with TXN-");
-        verify(notificationService, times(1)).createNotification(anyLong(), anyString(), anyString()); // Verify notification sent
+        assertTrue(result.getTransactionRef().startsWith("TXN-"));
     }
 }

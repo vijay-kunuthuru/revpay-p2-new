@@ -1,5 +1,6 @@
 package com.revpay.exception;
 
+import com.revpay.model.dto.ApiResponse;
 import com.revpay.model.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -11,19 +12,16 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(UserAlreadyExistsException.class)
-    public ResponseEntity<ErrorResponse> handleUserExists(UserAlreadyExistsException ex) {
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleUserExists(UserAlreadyExistsException ex) {
 
         ErrorResponse error =
                 new ErrorResponse("REG_ERR_01", ex.getMessage());
 
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(ApiResponse.error(error, "Registration Failed"), HttpStatus.BAD_REQUEST);
     }
 
-
-    // --- WALLET MODULE ---
-
     @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<ErrorResponse> handleWalletRuntime(RuntimeException ex) {
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleWalletRuntime(RuntimeException ex) {
 
         String code = "WALLET_ERR";
 
@@ -46,15 +44,12 @@ public class GlobalExceptionHandler {
         ErrorResponse error =
                 new ErrorResponse(code, ex.getMessage());
 
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(ApiResponse.error(error, "Operation Failed"), HttpStatus.BAD_REQUEST);
     }
 
-
-
-
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGeneral(Exception ex,
-                                                       HttpServletRequest request)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleGeneral(Exception ex,
+                                                                    HttpServletRequest request)
             throws Exception {
 
         String path = request.getRequestURI();
@@ -68,8 +63,7 @@ public class GlobalExceptionHandler {
         ErrorResponse error =
                 new ErrorResponse("SYS_ERR", ex.getMessage());
 
-        return new ResponseEntity<>(error,
+        return new ResponseEntity<>(ApiResponse.error(error, "Internal Server Error"),
                 HttpStatus.INTERNAL_SERVER_ERROR);
     }
-
 }
