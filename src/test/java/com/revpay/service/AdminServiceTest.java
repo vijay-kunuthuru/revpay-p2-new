@@ -1,6 +1,5 @@
-package com.revpay;
+package com.revpay.service;
 
-import com.revpay.service.InvoiceService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

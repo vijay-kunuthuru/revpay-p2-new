@@ -1,4 +1,4 @@
-package com.revpay;
+package com.revpay.service;
 
 import com.revpay.model.dto.LoanApplyDTO;
 import com.revpay.model.dto.LoanApprovalDTO;
@@ -8,9 +8,6 @@ import com.revpay.model.entity.*;
 import com.revpay.repository.LoanInstallmentRepository;
 import com.revpay.repository.LoanRepository;
 import com.revpay.repository.UserRepository;
-import com.revpay.service.LoanService;
-import com.revpay.service.NotificationService;
-import com.revpay.service.WalletService;
 import com.revpay.util.NotificationUtil;
 import org.junit.Before;
 import org.junit.Test;

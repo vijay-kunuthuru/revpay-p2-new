@@ -1,9 +1,8 @@
-package com.revpay;
+package com.revpay.service;
 
 import com.revpay.model.dto.TransactionRequest;
 import com.revpay.model.entity.*;
 import com.revpay.repository.*;
-import com.revpay.service.WalletService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

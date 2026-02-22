@@ -1,4 +1,4 @@
-package com.revpay;
+package com.revpay.service;
 
 import com.revpay.model.entity.BusinessProfile;
 import com.revpay.model.entity.Invoice;
@@ -7,7 +7,6 @@ import com.revpay.model.entity.Role;
 import com.revpay.repository.BusinessProfileRepository;
 import com.revpay.repository.InvoiceRepository;
 import com.revpay.repository.UserRepository;
-import com.revpay.service.InvoiceService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
