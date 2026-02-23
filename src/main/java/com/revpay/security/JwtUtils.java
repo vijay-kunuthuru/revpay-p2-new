@@ -3,8 +3,7 @@ package com.revpay.security;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -12,10 +11,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 
+@Slf4j
 @Component
 public class JwtUtils {
-
-    private static final Logger slf4jLogger = LoggerFactory.getLogger(JwtUtils.class);
 
     @Value("${revpay.app.jwtSecret}")
     private String jwtSecret;
@@ -28,6 +26,7 @@ public class JwtUtils {
     }
 
     public String generateTokenFromUsername(String email) {
+        log.debug("JWT_GENERATE | Creating token for subject: {}", email);
         return Jwts.builder()
                 .setSubject(email)
                 .setIssuedAt(new Date())
@@ -50,15 +49,16 @@ public class JwtUtils {
             Jwts.parserBuilder().setSigningKey(getSigningKey()).build().parseClaimsJws(authToken);
             return true;
         } catch (SignatureException e) {
-            slf4jLogger.error("Invalid JWT signature: {}", e.getMessage());
+            log.error("JWT_VALIDATION_ERROR | Invalid JWT signature: {}", e.getMessage());
         } catch (MalformedJwtException e) {
-            slf4jLogger.error("Invalid JWT token: {}", e.getMessage());
+            log.error("JWT_VALIDATION_ERROR | Invalid JWT token format: {}", e.getMessage());
         } catch (ExpiredJwtException e) {
-            slf4jLogger.error("JWT token is expired: {}", e.getMessage());
+            // Changed to WARN: Token expiration is a normal application event, not a system error
+            log.warn("JWT_VALIDATION_ERROR | JWT token is expired: {}", e.getMessage());
         } catch (UnsupportedJwtException e) {
-            slf4jLogger.error("JWT token is unsupported: {}", e.getMessage());
+            log.error("JWT_VALIDATION_ERROR | JWT token is unsupported: {}", e.getMessage());
         } catch (IllegalArgumentException e) {
-            slf4jLogger.error("JWT claims string is empty: {}", e.getMessage());
+            log.error("JWT_VALIDATION_ERROR | JWT claims string is empty: {}", e.getMessage());
         }
         return false;
     }

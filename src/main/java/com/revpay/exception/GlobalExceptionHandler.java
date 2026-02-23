@@ -1,102 +1,143 @@
 package com.revpay.exception;
 
+import com.revpay.model.dto.ApiResponse;
 import com.revpay.model.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-@ControllerAdvice
+import java.util.HashMap;
+import java.util.Map;
+
+@Slf4j
+@RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // --- 1. VALIDATION & TYPE MISMATCH HANDLERS ---
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleValidationExceptions(
+            MethodArgumentNotValidException ex, HttpServletRequest request) {
+        Map<String, String> details = new HashMap<>();
+        ex.getBindingResult().getAllErrors().forEach((error) -> {
+            String fieldName = ((FieldError) error).getField();
+            String errorMessage = error.getDefaultMessage();
+            details.put(fieldName, errorMessage);
+        });
+        return buildErrorResponse("VAL_001", "Validation failed", request.getRequestURI(), HttpStatus.BAD_REQUEST, details);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        String message = String.format("Parameter '%s' should be of type %s", ex.getName(), ex.getRequiredType().getSimpleName());
+        return buildErrorResponse("VAL_002", message, request.getRequestURI(), HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleMissingParams(
+            MissingServletRequestParameterException ex, HttpServletRequest request) {
+        return buildErrorResponse("VAL_003", ex.getMessage(), request.getRequestURI(), HttpStatus.BAD_REQUEST);
+    }
+
+    // --- 2. BUSINESS & SECURITY EXCEPTIONS ---
+
     @ExceptionHandler(UserAlreadyExistsException.class)
-    public ResponseEntity<ErrorResponse> handleUserExists(UserAlreadyExistsException ex) {
-        ErrorResponse error = new ErrorResponse("REG_ERR_01", ex.getMessage());
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleUserExists(
+            UserAlreadyExistsException ex, HttpServletRequest request) {
+        return buildErrorResponse("REG_001", ex.getMessage(), request.getRequestURI(), HttpStatus.CONFLICT);
     }
 
-    // --- WALLET MODULE EXCEPTIONS ---
+    @ExceptionHandler(InsufficientBalanceException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleInsufficientBalance(
+            InsufficientBalanceException ex, HttpServletRequest request) {
+        return buildErrorResponse("WAL_001", ex.getMessage(), request.getRequestURI(), HttpStatus.PAYMENT_REQUIRED);
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleNotFound(
+            ResourceNotFoundException ex, HttpServletRequest request) {
+        return buildErrorResponse("RES_404", ex.getMessage(), request.getRequestURI(), HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleUnauthorized(
+            UnauthorizedException ex, HttpServletRequest request) {
+        return buildErrorResponse("AUTH_401", ex.getMessage(), request.getRequestURI(), HttpStatus.UNAUTHORIZED);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleAccessDenied(
+            AccessDeniedException ex, HttpServletRequest request) {
+        return buildErrorResponse("AUTH_403", "Access Denied: You do not have permission for this resource", request.getRequestURI(), HttpStatus.FORBIDDEN);
+    }
+
+    // --- 3. DATA & RUNTIME HANDLERS ---
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleDataIntegrity(
+            DataIntegrityViolationException ex, HttpServletRequest request) {
+        log.error("DATABASE_ERROR | Path: {} | Error: {}", request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse("DB_001", "Database integrity violation (possible duplicate record)", request.getRequestURI(), HttpStatus.CONFLICT);
+    }
+
+    /**
+     * Re-synchronized as 'handleWalletRuntime' for backward compatibility.
+     */
     @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<ErrorResponse> handleWalletRuntime(RuntimeException ex) {
-        String code = "WALLET_ERR";
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleWalletRuntime(
+            RuntimeException ex, HttpServletRequest request) {
+        log.warn("BUSINESS_LOGIC_ERROR | Path: {} | Message: {}", request.getRequestURI(), ex.getMessage());
+
+        String code = "GEN_ERR";
         String message = ex.getMessage();
-
         if (message != null) {
-            // Authentication errors
-            if (message.contains("PIN")) {
-                code = "AUTH_ERR_02";
-            }
-            // Balance errors
-            else if (message.contains("balance") || message.contains("Balance")) {
-                code = "WALLET_ERR_01";
-            }
-            // Limit errors
-            else if (message.contains("limit") || message.contains("limit of ₹50,000")) {
-                code = "LIMIT_ERR_01";
-            }
-            // Card errors
-            else if (message.contains("card") || message.contains("Card")) {
-                if (message.contains("already linked")) {
-                    code = "CARD_ERR_01"; // Duplicate card
-                } else if (message.contains("not found")) {
-                    code = "CARD_ERR_02"; // Card not found
-                } else if (message.contains("authorized")) {
-                    code = "CARD_ERR_03"; // Not authorized to modify card
-                } else {
-                    code = "CARD_ERR_04"; // Other card errors
-                }
-            }
-            // Money request errors
-            else if (message.contains("request") || message.contains("Request")) {
-                if (message.contains("pending")) {
-                    code = "REQ_ERR_01"; // Request not pending
-                } else if (message.contains("not found")) {
-                    code = "REQ_ERR_02"; // Request not found
-                } else if (message.contains("authorized")) {
-                    code = "REQ_ERR_03"; // Not authorized
-                } else {
-                    code = "REQ_ERR_04"; // Other request errors
-                }
-            }
-            // User errors
-            else if (message.contains("User not found") || message.contains("user not found")) {
-                code = "USER_ERR_01";
-            }
-            // Receiver errors
-            else if (message.contains("Receiver not found") || message.contains("receiver not found")) {
-                code = "USER_ERR_02";
-            }
-            // Wallet errors
-            else if (message.contains("Wallet not found") || message.contains("wallet not found")) {
-                code = "WALLET_ERR_02";
-            }
-            // Invoice errors
-            else if (message.contains("Invoice") || message.contains("invoice")) {
-                if (message.contains("not found")) {
-                    code = "INV_ERR_01"; // Invoice not found
-                } else {
-                    code = "INV_ERR_02"; // Other invoice errors
-                }
-            }
+            String lower = message.toLowerCase();
+            if (lower.contains("pin")) code = "AUTH_002";
+            else if (lower.contains("balance")) code = "WAL_001";
+            else if (lower.contains("limit")) code = "LIM_001";
         }
-
-        ErrorResponse error = new ErrorResponse(code, message);
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        return buildErrorResponse(code, message, request.getRequestURI(), HttpStatus.BAD_REQUEST);
     }
 
+    /**
+     * Re-synchronized as 'handleGeneral' for system-wide fallbacks.
+     */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGeneral(Exception ex, HttpServletRequest request)
-            throws Exception {
+    public ResponseEntity<ApiResponse<ErrorResponse>> handleGeneral(
+            Exception ex, HttpServletRequest request) {
+        log.error("SYSTEM_FAILURE | Path: {} | Error: ", request.getRequestURI(), ex);
 
-        String path = request.getRequestURI();
-
-
-        if (path.contains("/v3/api-docs") || path.contains("/swagger-ui")) {
-            throw ex;
+        if (request.getRequestURI().contains("swagger") || request.getRequestURI().contains("api-docs")) {
+            return null;
         }
+        return buildErrorResponse("SYS_500", "An unexpected system error occurred", request.getRequestURI(), HttpStatus.INTERNAL_SERVER_ERROR);
+    }
 
-        ErrorResponse error = new ErrorResponse("SYS_ERR", ex.getMessage());
-        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    // --- PRIVATE UTILITIES ---
+
+    private ResponseEntity<ApiResponse<ErrorResponse>> buildErrorResponse(
+            String code, String message, String path, HttpStatus status) {
+        return buildErrorResponse(code, message, path, status, null);
+    }
+
+    private ResponseEntity<ApiResponse<ErrorResponse>> buildErrorResponse(
+            String code, String message, String path, HttpStatus status, Map<String, String> details) {
+        ErrorResponse errorRes = ErrorResponse.builder()
+                .errorCode(code)
+                .message(message)
+                .path(path)
+                .details(details)
+                .build();
+        return ResponseEntity.status(status).body(ApiResponse.error(errorRes, message, code));
     }
 }

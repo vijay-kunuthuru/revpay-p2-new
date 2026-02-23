@@ -7,13 +7,18 @@ import com.revpay.model.entity.Role;
 import com.revpay.repository.BusinessProfileRepository;
 import com.revpay.repository.InvoiceRepository;
 import com.revpay.repository.UserRepository;
+import com.revpay.security.UserDetailsImpl;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -43,8 +48,6 @@ public class InvoiceServiceTest {
         user.setFullName("Test Business Owner");
         user.setPhoneNumber("9999988888");
         user.setRole(Role.BUSINESS);
-
-        // These fields are required by your database schema to not be null
         user.setPasswordHash("dummy_hash");
         user.setTransactionPinHash("pin_hash");
         user.setSecurityQuestion("Question?");
@@ -56,6 +59,20 @@ public class InvoiceServiceTest {
         testProfile.setUser(user);
         testProfile.setBusinessName("Test RevPay Business");
         testProfile = businessProfileRepository.save(testProfile);
+
+        // FIXED: Build the UserDetailsImpl object exactly as the JwtAuthenticationFilter does
+        UserDetailsImpl userDetails = UserDetailsImpl.build(user);
+
+        // Pass the UserDetails object as the principal
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test

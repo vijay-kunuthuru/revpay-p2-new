@@ -9,6 +9,8 @@ import com.revpay.util.EmiCalculator;
 import com.revpay.util.NotificationUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,15 +42,15 @@ public class LoanService {
         log.info("Applying loan for userId: {}, amount: {}", userId, dto.getAmount());
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         if (user.getRole() != Role.BUSINESS) {
-            throw new RuntimeException("Only business users can apply for loans");
+            throw new IllegalArgumentException("Only business users can apply for loans");
         }
 
         log.debug("Checking eligibility for userId: {}", userId);
         if (!isEligibleForLoan(userId, dto.getAmount())) {
-            throw new RuntimeException("Loan amount exceeds eligibility limit");
+            throw new IllegalArgumentException("Loan amount exceeds eligibility limit");
         }
 
         Loan loan = Loan.builder()
@@ -86,15 +88,14 @@ public class LoanService {
         Loan loan = loanRepository.findById(dto.getLoanId())
                 .orElseThrow(() -> {
                     log.error("Loan not found for loanId: {}", dto.getLoanId());
-                    return new RuntimeException("Loan not found");
+                    return new IllegalArgumentException("Loan not found");
                 });
 
-        // ── BUG FIX #4: Guard against double-approval / double disbursement ──
         if (loan.getStatus() == LoanStatus.ACTIVE || loan.getStatus() == LoanStatus.CLOSED) {
-            throw new RuntimeException("Loan is already " + loan.getStatus());
+            throw new IllegalArgumentException("Loan is already " + loan.getStatus());
         }
 
-        if (dto.isApproved()) {
+        if (dto.getApproved()) {
             log.info("Loan approved for loanId: {}", dto.getLoanId());
 
             BigDecimal interest = (dto.getInterestRate() != null)
@@ -174,16 +175,16 @@ public class LoanService {
         Loan loan = loanRepository.findById(dto.getLoanId())
                 .orElseThrow(() -> {
                     log.error("Loan not found for loanId: {}", dto.getLoanId());
-                    return new RuntimeException("Loan not found");
+                    return new IllegalArgumentException("Loan not found");
                 });
 
         if (!loan.getUser().getUserId().equals(userId)) {
             log.warn("Unauthorized repayment attempt by userId: {} for loanId: {}", userId, dto.getLoanId());
-            throw new RuntimeException("Unauthorized repayment attempt");
+            throw new IllegalArgumentException("Unauthorized repayment attempt");
         }
 
         if (loan.getStatus() == LoanStatus.CLOSED) {
-            throw new RuntimeException("Loan is already fully repaid");
+            throw new IllegalArgumentException("Loan is already fully repaid");
         }
 
         LoanInstallment nextInstallment = installmentRepository
@@ -194,7 +195,7 @@ public class LoanService {
                 .findFirst()
                 .orElseThrow(() -> {
                     log.warn("No pending EMI found for loanId: {}", loan.getLoanId());
-                    return new RuntimeException("No pending EMI");
+                    return new IllegalArgumentException("No pending EMI");
                 });
 
         BigDecimal emiAmount     = nextInstallment.getAmount();
@@ -246,16 +247,16 @@ public class LoanService {
         Loan loan = loanRepository.findById(loanId)
                 .orElseThrow(() -> {
                     log.error("Loan not found for loanId: {}", loanId);
-                    return new RuntimeException("Loan not found");
+                    return new IllegalArgumentException("Loan not found");
                 });
 
         if (!loan.getUser().getUserId().equals(userId)) {
             log.warn("Unauthorized pre-closure attempt by userId: {} for loanId: {}", userId, loanId);
-            throw new RuntimeException("Unauthorized");
+            throw new IllegalArgumentException("Unauthorized");
         }
 
         if (loan.getStatus() == LoanStatus.CLOSED) {
-            throw new RuntimeException("Loan is already closed");
+            throw new IllegalArgumentException("Loan is already closed");
         }
 
         BigDecimal remaining = loan.getRemainingAmount();
@@ -289,6 +290,7 @@ public class LoanService {
     }
 
 
+    @Transactional(readOnly = true)
     public List<Loan> getUserLoans(Long userId) {
         log.info("Fetching loans for userId: {}", userId);
         List<Loan> loans = loanRepository.findByUser_UserId(userId);
@@ -296,6 +298,13 @@ public class LoanService {
         return loans;
     }
 
+    @Transactional(readOnly = true)
+    public Page<Loan> getUserLoansPaged(Long userId, Pageable pageable) {
+        log.info("Fetching paginated loans for userId: {}", userId);
+        return loanRepository.findByUser_UserId(userId, pageable);
+    }
+
+    @Transactional(readOnly = true)
     public BigDecimal totalOutstanding(Long userId) {
         log.info("Calculating total outstanding amount for userId: {}", userId);
         BigDecimal total = loanRepository.findByUser_UserId(userId)
@@ -307,6 +316,7 @@ public class LoanService {
         return total;
     }
 
+    @Transactional(readOnly = true)
     public List<Loan> getAllLoans() {
         log.info("Fetching all loans from system");
         List<Loan> loans = loanRepository.findAll();
@@ -314,18 +324,25 @@ public class LoanService {
         return loans;
     }
 
+    @Transactional(readOnly = true)
+    public Page<Loan> getAllLoansPaged(Pageable pageable) {
+        log.info("Fetching all loans from system (paginated)");
+        return loanRepository.findAll(pageable);
+    }
+
+    @Transactional(readOnly = true)
     public List<LoanInstallment> getEmiSchedule(Long userId, Long loanId) {
         log.info("Fetching EMI schedule for loanId: {} by userId: {}", loanId, userId);
 
         Loan loan = loanRepository.findById(loanId)
                 .orElseThrow(() -> {
                     log.error("Loan not found for loanId: {}", loanId);
-                    return new RuntimeException("Loan not found");
+                    return new IllegalArgumentException("Loan not found");
                 });
 
         if (!loan.getUser().getUserId().equals(userId)) {
             log.warn("Unauthorized EMI schedule access by userId: {} for loanId: {}", userId, loanId);
-            throw new RuntimeException("Unauthorized");
+            throw new IllegalArgumentException("Unauthorized");
         }
 
         List<LoanInstallment> installments = installmentRepository.findByLoan_LoanId(loanId);
@@ -333,6 +350,21 @@ public class LoanService {
         return installments;
     }
 
+    @Transactional(readOnly = true)
+    public Page<LoanInstallment> getEmiSchedulePaged(Long userId, Long loanId, Pageable pageable) {
+        log.info("Fetching paginated EMI schedule for loanId: {} by userId: {}", loanId, userId);
+
+        Loan loan = loanRepository.findById(loanId)
+                .orElseThrow(() -> new IllegalArgumentException("Loan not found"));
+
+        if (!loan.getUser().getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Unauthorized");
+        }
+
+        return installmentRepository.findByLoan_LoanId(loanId, pageable);
+    }
+
+    @Transactional(readOnly = true)
     public List<LoanInstallment> getOverdueEmis(Long userId) {
         log.info("Fetching overdue EMIs for userId: {}", userId);
 
@@ -348,6 +380,15 @@ public class LoanService {
         return overdueList;
     }
 
+    @Transactional(readOnly = true)
+    public Page<LoanInstallment> getOverdueEmisPaged(Long userId, Pageable pageable) {
+        log.info("Fetching paginated overdue EMIs for userId: {}", userId);
+        // Note: For pagination, querying strictly on status OVERDUE or filtering via query is required.
+        // If a hybrid logic is needed, the repository query must reflect `status = OVERDUE OR (status = PENDING AND dueDate < CURRENT_DATE)`
+        return installmentRepository.findOverdueByUserId(userId, LocalDate.now(), pageable);
+    }
+
+    @Transactional(readOnly = true)
     public BigDecimal totalPaid(Long userId) {
         log.info("Calculating total paid EMI amount for userId: {}", userId);
 
@@ -361,6 +402,7 @@ public class LoanService {
         return total;
     }
 
+    @Transactional(readOnly = true)
     public BigDecimal totalPending(Long userId) {
         log.info("Calculating total pending EMI amount for userId: {}", userId);
 
@@ -407,6 +449,7 @@ public class LoanService {
         log.info("Overdue EMI check completed. {} installments marked overdue.", nowOverdue.size());
     }
 
+    @Transactional(readOnly = true)
     public int calculateCreditScore(Long userId) {
         log.info("Calculating credit score for userId: {}", userId);
 
@@ -422,6 +465,7 @@ public class LoanService {
         return score;
     }
 
+    @Transactional(readOnly = true)
     public RiskTier getRiskTier(Long userId) {
         log.info("Evaluating risk tier for userId: {}", userId);
         int score = calculateCreditScore(userId);
@@ -432,6 +476,7 @@ public class LoanService {
         return tier;
     }
 
+    @Transactional(readOnly = true)
     public BigDecimal getLoanLimit(Long userId) {
         log.info("Calculating loan limit for userId: {}", userId);
         int score = calculateCreditScore(userId);
@@ -443,6 +488,7 @@ public class LoanService {
         return limit;
     }
 
+    @Transactional(readOnly = true)
     public boolean isEligibleForLoan(Long userId, BigDecimal requestedAmount) {
         log.info("Checking loan eligibility for userId: {} with requested amount: {}", userId, requestedAmount);
         RiskTier risk = getRiskTier(userId);
@@ -457,6 +503,7 @@ public class LoanService {
         return eligible;
     }
 
+    @Transactional(readOnly = true)
     public LoanEligibilityDTO checkEligibility(Long userId) {
         log.info("Fetching loan eligibility details for userId: {}", userId);
         int score        = calculateCreditScore(userId);
@@ -473,6 +520,7 @@ public class LoanService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public VipTier getVipTier(Long userId) {
         log.info("Evaluating VIP tier for userId: {}", userId);
         int score = calculateCreditScore(userId);
@@ -510,18 +558,22 @@ public class LoanService {
         return finalInterest;
     }
 
+    @Transactional(readOnly = true)
     public LoanRecommendationDTO getLoanRecommendation(Long userId) {
         log.info("Generating loan recommendation for userId: {}", userId);
+
         int score           = calculateCreditScore(userId);
         RiskTier risk       = getRiskTier(userId);
         VipTier vip         = getVipTier(userId);
         BigDecimal limit    = getLoanLimit(userId);
         BigDecimal interest = getDynamicInterest(userId);
 
+        // FIXED: Added default case to ensure the switch expression is exhaustive
         BigDecimal recommended = switch (risk) {
             case LOW    -> limit;
             case MEDIUM -> limit.multiply(MEDIUM_RISK_FACTOR);
             case HIGH   -> limit.multiply(HIGH_RISK_FACTOR);
+            default     -> limit.multiply(HIGH_RISK_FACTOR); // Fallback for safety
         };
 
         log.debug("Recommendation -> Score: {}, Risk: {}, VIP: {}, Limit: {}, Recommended: {}, Interest: {}",
@@ -532,7 +584,9 @@ public class LoanService {
                 .riskTier(risk)
                 .vipTier(vip)
                 .recommendedAmount(recommended)
-                .expectedInterest(interest)
+                // Synchronized with the DTO field name (Ensure this matches your latest DTO)
+                .expectedInterestRate(interest)
+                .logicReasoning("Recommendation based on internal credit score of " + score)
                 .build();
     }
 }

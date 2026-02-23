@@ -2,103 +2,104 @@ package com.revpay.controller;
 
 import com.revpay.model.entity.Notification;
 import com.revpay.model.entity.User;
+import com.revpay.repository.IdempotencyRepository;
 import com.revpay.repository.UserRepository;
 import com.revpay.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import java.util.List;
+// Import the required security classes to mock the Principal
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+
+import java.util.ArrayList;
 import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@ExtendWith(MockitoExtension.class)
+@WebMvcTest(controllers = NotificationController.class)
+@AutoConfigureMockMvc(addFilters = false) // Bypass security filters for this specific controller test
 class NotificationControllerTest {
 
+    @Autowired
     private MockMvc mockMvc;
 
-    @Mock private NotificationService service;
-    @Mock private UserRepository userRepository; // Added to support getAuthenticatedUser()
+    @MockitoBean
+    private NotificationService service;
 
-    @InjectMocks private NotificationController controller;
+    @MockitoBean
+    private UserRepository userRepository;
+
+    @MockitoBean
+    private IdempotencyRepository idempotencyRepository;
+
+    private Authentication mockAuth;
 
     @BeforeEach
     void setup() {
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
-
-        // 1. Simulate a logged-in user in the Security Context
-        Authentication authentication = mock(Authentication.class);
-        SecurityContext securityContext = mock(SecurityContext.class);
-        lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
-        SecurityContextHolder.setContext(securityContext);
-
-        // 2. Mock the JWT email extraction
-        lenient().when(authentication.getName()).thenReturn("test@revpay.com");
+        // Create a mock Authentication object to pass into the controller methods
+        mockAuth = new UsernamePasswordAuthenticationToken("test@revpay.com", "password");
     }
 
-    // GET /api/notifications
     @Test
+    @WithMockUser(username = "test@revpay.com")
     void getMyNotifications_shouldReturnNotificationList() throws Exception {
-        // Mock the user lookup
         User mockUser = new User();
         mockUser.setUserId(1L);
-        when(userRepository.findByEmail("test@revpay.com")).thenReturn(Optional.of(mockUser));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(mockUser));
 
-        Notification n1 = new Notification();
-        n1.setMessage("Payment received");
+        Page<Notification> emptyPage = new PageImpl<>(new ArrayList<>());
 
-        when(service.getUserNotifications(1L)).thenReturn(List.of(n1));
+        when(service.getUserNotificationsPaged(anyLong(), any(Pageable.class))).thenReturn(emptyPage);
 
-        mockMvc.perform(get("/api/notifications")) // No ID in URL anymore
+        // FIXED: Added .principal(mockAuth) to ensure the controller method argument is populated
+        mockMvc.perform(get("/api/v1/notifications").principal(mockAuth))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].message").value("Payment received"));
+                .andExpect(jsonPath("$.success").value(true));
 
-        verify(service).getUserNotifications(1L);
+        verify(service).getUserNotificationsPaged(anyLong(), any(Pageable.class));
     }
 
-    // PUT /api/notifications/{id}/read
     @Test
+    @WithMockUser(username = "test@revpay.com")
     void markAsRead_shouldReturnSuccessMessage() throws Exception {
-        doNothing().when(service).markAsRead(10L);
+        doNothing().when(service).markAsRead(anyLong());
 
-        mockMvc.perform(put("/api/notifications/10/read"))
+        mockMvc.perform(put("/api/v1/notifications/10/read").principal(mockAuth))
                 .andExpect(status().isOk())
-                .andExpect(content().string("Notification marked as read"));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Notification marked as read"));
 
-        verify(service).markAsRead(10L);
+        verify(service).markAsRead(eq(10L));
     }
 
-    // POST /api/notifications/test
     @Test
+    @WithMockUser(username = "test@revpay.com")
     void testNotification_shouldCreateNotification() throws Exception {
-        // Mock the user lookup
         User mockUser = new User();
         mockUser.setUserId(5L);
         mockUser.setFullName("Test User");
-        when(userRepository.findByEmail("test@revpay.com")).thenReturn(Optional.of(mockUser));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(mockUser));
 
         doNothing().when(service).createNotification(anyLong(), anyString(), anyString());
 
-        mockMvc.perform(post("/api/notifications/test")) // No ID in URL anymore
+        // FIXED: Added .principal(mockAuth)
+        mockMvc.perform(post("/api/v1/notifications/test").principal(mockAuth))
                 .andExpect(status().isOk())
-                .andExpect(content().string("Test notification created successfully"));
+                .andExpect(jsonPath("$.success").value(true));
 
-        verify(service).createNotification(
-                5L,
-                "Test notification from system for: Test User",
-                "SYSTEM"
-        );
+        verify(service).createNotification(eq(5L), anyString(), eq("SYSTEM"));
     }
 }

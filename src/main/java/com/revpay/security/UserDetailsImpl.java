@@ -13,12 +13,14 @@ public class UserDetailsImpl implements UserDetails {
     private Long userId;
     private String email;
     private String password;
+    private boolean isActive; // Added to map to your DB flag
     private Collection<? extends GrantedAuthority> authorities;
 
-    public UserDetailsImpl(Long userId, String email, String password, Collection<? extends GrantedAuthority> authorities) {
+    public UserDetailsImpl(Long userId, String email, String password, boolean isActive, Collection<? extends GrantedAuthority> authorities) {
         this.userId = userId;
         this.email = email;
         this.password = password;
+        this.isActive = isActive;
         this.authorities = authorities;
     }
 
@@ -29,6 +31,7 @@ public class UserDetailsImpl implements UserDetails {
                 user.getUserId(),
                 user.getEmail(),
                 user.getPasswordHash(),
+                user.isActive(), // Pulling the actual status from the DB
                 Collections.singletonList(authority));
     }
 
@@ -72,6 +75,6 @@ public class UserDetailsImpl implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return isActive; // Spring Security will now block login if isActive is false
     }
 }

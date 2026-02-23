@@ -1,16 +1,22 @@
 package com.revpay.repository;
 
 import com.revpay.model.entity.Invoice;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
 import java.util.List;
 
+@Repository
 public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
-    // Find invoices by business profile ID
     List<Invoice> findByBusinessProfile_ProfileId(Long profileId);
 
-    // Filter by status
+    Page<Invoice> findByBusinessProfile_ProfileId(Long profileId, Pageable pageable);
+
     List<Invoice> findByStatus(Invoice.InvoiceStatus status);
 
-} // This closing brace MUST be at the end
+    Page<Invoice> findByStatus(Invoice.InvoiceStatus status, Pageable pageable);
 
+}

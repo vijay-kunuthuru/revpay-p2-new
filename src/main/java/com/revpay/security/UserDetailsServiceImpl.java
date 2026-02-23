@@ -2,25 +2,33 @@ package com.revpay.security;
 
 import com.revpay.model.entity.User;
 import com.revpay.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class UserDetailsServiceImpl implements UserDetailsService {
 
-    @Autowired
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User Not Found with email: " + email));
+        log.debug("AUTH_LOAD_USER | Attempting to load user by email: {}", email);
 
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> {
+                    log.error("AUTH_USER_NOT_FOUND | No user found with email: {}", email);
+                    return new UsernameNotFoundException("User Not Found with email: " + email);
+                });
+
+        log.debug("AUTH_USER_LOADED | Successfully loaded UserID: {}", user.getUserId());
         return UserDetailsImpl.build(user);
     }
 }

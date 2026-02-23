@@ -62,9 +62,11 @@ public class AuthControllerTest {
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
 
         Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_PERSONAL"));
-        UserDetailsImpl userDetails = new UserDetailsImpl(1L, "test@revpay.com", "password", authorities);
-        when(authentication.getPrincipal()).thenReturn(userDetails);
 
+        // FIXED: Added 'true' for the isActive flag we introduced earlier
+        UserDetailsImpl userDetails = new UserDetailsImpl(1L, "test@revpay.com", "password", true, authorities);
+
+        when(authentication.getPrincipal()).thenReturn(userDetails);
         when(jwtUtils.generateTokenFromUsername("test@revpay.com")).thenReturn("mock-jwt-token");
 
         ResponseEntity<ApiResponse<JwtResponse>> response = authController.authenticateUser(loginRequest);

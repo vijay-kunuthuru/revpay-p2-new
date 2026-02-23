@@ -1,29 +1,47 @@
 package com.revpay.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.revpay.model.dto.ApiResponse;
+import com.revpay.model.dto.ErrorResponse;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
+@Slf4j
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
-    private static final Logger slf4jLogger = LoggerFactory.getLogger(JwtAuthenticationEntryPoint.class);
+    // Inject Spring's auto-configured ObjectMapper that supports Java 8 Date/Time
+    private final ObjectMapper objectMapper;
 
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
                          AuthenticationException authException) throws IOException, ServletException {
 
-        slf4jLogger.error("UNAUTHORIZED_ACCESS | Path: {} | Error: {}", request.getRequestURI(), authException.getMessage());
+        log.error("UNAUTHORIZED_ACCESS | Path: {} | Error: {}", request.getRequestURI(), authException.getMessage());
 
-        response.setContentType("application/json");
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.getWriter().write("{ \"error\": \"Unauthorized\", \"message\": \"" + authException.getMessage() + "\" }");
+
+        // Construct the exact same ErrorResponse used in GlobalExceptionHandler
+        ErrorResponse errorRes = ErrorResponse.of(
+                "AUTH_401",
+                "Full authentication is required to access this resource",
+                request.getRequestURI()
+        );
+
+        ApiResponse<ErrorResponse> apiResponse = ApiResponse.error(errorRes, "Unauthorized Access", "AUTH_401");
+
+        // Serialize and write the standardized response
+        objectMapper.writeValue(response.getOutputStream(), apiResponse);
     }
 }

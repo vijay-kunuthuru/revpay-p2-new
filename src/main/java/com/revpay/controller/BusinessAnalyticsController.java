@@ -1,43 +1,69 @@
 package com.revpay.controller;
 
+import com.revpay.model.dto.ApiResponse;
 import com.revpay.model.dto.BusinessSummaryDTO;
 import com.revpay.model.dto.RevenueReportDTO;
 import com.revpay.service.BusinessAnalyticsService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @RestController
-@RequestMapping("/analytics/business")
+@RequestMapping("/api/v1/analytics/business")
+@RequiredArgsConstructor
+@Tag(name = "Business Analytics", description = "Endpoints for generating financial reports and transaction summaries for business accounts")
 public class BusinessAnalyticsController {
 
     private final BusinessAnalyticsService analyticsService;
 
-    public BusinessAnalyticsController(BusinessAnalyticsService analyticsService) {
-        this.analyticsService = analyticsService;
-    }
-
-    // Transaction Summary
     @GetMapping("/{businessId}/summary")
-    public BusinessSummaryDTO getSummary(@PathVariable Long businessId) {
-        return analyticsService.getTransactionSummary(businessId);
+    @PreAuthorize("hasAnyRole('BUSINESS', 'ADMIN')") // Secures the endpoint
+    @Operation(summary = "Get business transaction summary", description = "Retrieves a high-level overview of transaction volumes and revenue for a specific business.")
+    public ResponseEntity<ApiResponse<BusinessSummaryDTO>> getSummary(
+            @Parameter(description = "ID of the business profile") @PathVariable Long businessId) {
+
+        log.debug("Fetching transaction summary for business ID: {}", businessId);
+
+        BusinessSummaryDTO summary = analyticsService.getTransactionSummary(businessId);
+
+        return ResponseEntity.ok(ApiResponse.success(summary, "Business summary retrieved successfully"));
     }
 
-    // Daily Revenue
     @GetMapping("/{businessId}/revenue/daily")
-    public List<RevenueReportDTO> getDailyRevenue(@PathVariable Long businessId) {
-        return analyticsService.getDailyRevenue(businessId);
+    @PreAuthorize("hasAnyRole('BUSINESS', 'ADMIN')")
+    @Operation(summary = "Get daily revenue report", description = "Generates a day-by-day breakdown of revenue for a specific business.")
+    public ResponseEntity<ApiResponse<List<RevenueReportDTO>>> getDailyRevenue(
+            @Parameter(description = "ID of the business profile") @PathVariable Long businessId) {
+
+        log.debug("Fetching daily revenue report for business ID: {}", businessId);
+
+        List<RevenueReportDTO> revenue = analyticsService.getDailyRevenue(businessId);
+
+        return ResponseEntity.ok(ApiResponse.success(revenue, "Daily revenue retrieved successfully"));
     }
 
-    // NEW: Revenue for Custom Date Range
     @GetMapping("/{businessId}/revenue/range")
-    public List<RevenueReportDTO> getRevenueInDateRange(
-            @PathVariable Long businessId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+    @PreAuthorize("hasAnyRole('BUSINESS', 'ADMIN')")
+    @Operation(summary = "Get revenue by date range", description = "Generates a revenue report for a custom specified date range.")
+    public ResponseEntity<ApiResponse<List<RevenueReportDTO>>> getRevenueInDateRange(
+            @Parameter(description = "ID of the business profile") @PathVariable Long businessId,
+            @Parameter(description = "Start date (ISO format)") @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
+            @Parameter(description = "End date (ISO format)") @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
 
-        return analyticsService.getRevenueInDateRange(businessId, start, end);
+        log.info("Fetching custom revenue report for business ID: {} | Range: {} to {}", businessId, start, end);
+
+        List<RevenueReportDTO> revenue = analyticsService.getRevenueInDateRange(businessId, start, end);
+
+        return ResponseEntity.ok(ApiResponse.success(revenue, "Date range revenue retrieved successfully"));
     }
 }

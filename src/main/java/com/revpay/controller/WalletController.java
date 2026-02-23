@@ -1,216 +1,252 @@
 package com.revpay.controller;
 
+import com.revpay.exception.ResourceNotFoundException;
 import com.revpay.model.dto.*;
 import com.revpay.model.entity.*;
 import com.revpay.repository.UserRepository;
 import com.revpay.service.WalletService;
-import org.springframework.beans.factory.annotation.Autowired;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
 
+@Slf4j
 @RestController
-@RequestMapping("/api/wallet")
+@RequestMapping("/api/v1/wallet")
+@RequiredArgsConstructor
+@PreAuthorize("isAuthenticated()")
+@Tag(name = "Wallet & Ledger", description = "Complete management of the digital wallet, from money movement to financial reporting")
 public class WalletController {
 
-    @Autowired private WalletService walletService;
-    @Autowired private UserRepository userRepository;
+    private final WalletService walletService;
+    private final UserRepository userRepository;
 
-    private User getAuthenticatedUser() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+    // --- INTERNAL DTOS (Scoped for Controller Cleanliness & Security) ---
+    public record TransactionDTO(Long transactionId, Long senderId, Long receiverId, BigDecimal amount, String type, String status, String description, LocalDateTime timestamp, String transactionRef) {}
+    public record PaymentMethodDTO(Long id, String partialCardNumber, String expiryDate, String billingAddress, boolean isDefault, String cardType) {}
+    public record SimpleAmountRequest(@NotNull @Positive(message = "Amount must be positive") BigDecimal amount, String description) {}
+    public record PinPayload(@NotBlank(message = "PIN is required") String pin) {}
+    public record MoneyRequestPayload(@NotBlank String targetEmail, @NotNull @Positive BigDecimal amount) {}
+
+    // SECURE DTO FOR CARDS (Prevents Mass Assignment)
+    public record CardPayload(
+            @NotBlank(message = "Card number is required") String cardNumber,
+            @NotBlank(message = "Expiry date is required") @Pattern(regexp = "^(0[1-9]|1[0-2])/?([0-9]{2})$", message = "Format must be MM/YY") String expiryDate,
+            @NotBlank(message = "CVV is required") String cvv,
+            String billingAddress,
+            String cardType
+    ) {}
+
+    // --- MAPPING HELPERS ---
+    private User getAuthenticatedUser(Authentication auth) {
+        return userRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("Session invalid or user not found"));
     }
 
-    // --- 1. CORE OPERATIONS ---
+    private TransactionDTO mapTx(Transaction t) {
+        return new TransactionDTO(
+                t.getTransactionId(),
+                t.getSender() != null ? t.getSender().getUserId() : null,
+                t.getReceiver() != null ? t.getReceiver().getUserId() : null,
+                t.getAmount(),
+                t.getType() != null ? t.getType().name() : null,
+                t.getStatus() != null ? t.getStatus().name() : null,
+                t.getDescription(),
+                t.getTimestamp(),
+                t.getTransactionRef()
+        );
+    }
+
+    private PaymentMethodDTO mapCard(PaymentMethod c) {
+        String masked = (c.getCardNumber() != null && c.getCardNumber().length() >= 4) ?
+                "**** **** **** " + c.getCardNumber().substring(c.getCardNumber().length() - 4) : "INVALID CARD";
+        return new PaymentMethodDTO(c.getId(), masked, c.getExpiryDate(), c.getBillingAddress(), c.isDefault(), c.getCardType() != null ? c.getCardType().name() : null);
+    }
+
+    // --- 1. CORE MONEY MOVEMENT ---
 
     @GetMapping("/balance")
-    public ResponseEntity<BigDecimal> getBalance() {
-        return ResponseEntity.ok(walletService.getBalance(getAuthenticatedUser().getUserId()));
+    public ResponseEntity<ApiResponse<BigDecimal>> getBalance(Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success(walletService.getBalance(getAuthenticatedUser(auth).getUserId()), "Balance retrieved"));
     }
 
     @PostMapping("/send")
-    public ResponseEntity<Transaction> transfer(@RequestBody TransactionRequest request) {
-        return ResponseEntity.ok(walletService.sendMoney(getAuthenticatedUser().getUserId(), request));
+    @Operation(summary = "P2P Money Transfer", parameters = {@Parameter(in = ParameterIn.HEADER, name = "Idempotency-Key", required = true)})
+    public ResponseEntity<ApiResponse<TransactionDTO>> transfer(@Valid @RequestBody TransactionRequest request, Authentication auth) {
+        log.info("Money transfer request by user: {}", auth.getName());
+        Transaction t = walletService.sendMoney(getAuthenticatedUser(auth).getUserId(), request);
+        return ResponseEntity.ok(ApiResponse.success(mapTx(t), "Transfer successful"));
     }
 
     @PostMapping("/add-funds")
-    public ResponseEntity<Transaction> addFunds(@RequestBody Map<String, Object> request) {
-        BigDecimal amount = new BigDecimal(request.get("amount").toString());
-        String description = request.getOrDefault("description", "Wallet Deposit").toString();
-        return ResponseEntity.ok(walletService.addFunds(getAuthenticatedUser().getUserId(), amount, description));
+    public ResponseEntity<ApiResponse<TransactionDTO>> addFunds(@Valid @RequestBody SimpleAmountRequest req, Authentication auth) {
+        Transaction t = walletService.addFunds(getAuthenticatedUser(auth).getUserId(), req.amount(), req.description());
+        return ResponseEntity.ok(ApiResponse.success(mapTx(t), "Funds added"));
     }
 
     @PostMapping("/withdraw")
-    public ResponseEntity<Transaction> withdraw(@RequestBody Map<String, Object> request) {
-        BigDecimal amount = new BigDecimal(request.get("amount").toString());
-        return ResponseEntity.ok(walletService.withdrawFunds(getAuthenticatedUser().getUserId(), amount));
+    public ResponseEntity<ApiResponse<TransactionDTO>> withdraw(@Valid @RequestBody SimpleAmountRequest req, Authentication auth) {
+        Transaction t = walletService.withdrawFunds(getAuthenticatedUser(auth).getUserId(), req.amount());
+        return ResponseEntity.ok(ApiResponse.success(mapTx(t), "Withdrawal successful"));
     }
 
-    // --- 2. INVOICE & MONEY REQUESTS (UPDATED) ---
+    // --- 2. BILL PAY & MONEY REQUESTS ---
 
     @PostMapping("/pay-invoice")
-    public ResponseEntity<Transaction> payInvoice(@RequestBody InvoicePaymentRequest request) {
-        return ResponseEntity.ok(walletService.payInvoice(
-                getAuthenticatedUser().getUserId(),
-                request.getInvoiceId(),
-                request.getTransactionPin()
-        ));
+    public ResponseEntity<ApiResponse<TransactionDTO>> payInvoice(@Valid @RequestBody InvoicePaymentRequest req, Authentication auth) {
+        Transaction t = walletService.payInvoice(getAuthenticatedUser(auth).getUserId(), req.getInvoiceId(), req.getTransactionPin());
+        return ResponseEntity.ok(ApiResponse.success(mapTx(t), "Invoice paid"));
     }
 
     @PostMapping("/request")
-    public ResponseEntity<Transaction> requestMoney(@RequestBody Map<String, Object> request) {
-        String targetEmail = request.get("targetEmail").toString();
-        BigDecimal amount = new BigDecimal(request.get("amount").toString());
-        return ResponseEntity.ok(walletService.requestMoney(getAuthenticatedUser().getUserId(), targetEmail, amount));
+    public ResponseEntity<ApiResponse<TransactionDTO>> requestMoney(@Valid @RequestBody MoneyRequestPayload req, Authentication auth) {
+        Transaction t = walletService.requestMoney(getAuthenticatedUser(auth).getUserId(), req.targetEmail(), req.amount());
+        return ResponseEntity.ok(ApiResponse.success(mapTx(t), "Request initiated"));
     }
 
     @PostMapping("/request/accept/{txnId}")
-    public ResponseEntity<Transaction> acceptRequest(@PathVariable Long txnId, @RequestBody Map<String, String> body) {
-        return ResponseEntity.ok(walletService.acceptRequest(txnId, body.get("pin")));
+    public ResponseEntity<ApiResponse<TransactionDTO>> acceptRequest(@PathVariable Long txnId, @Valid @RequestBody PinPayload body) {
+        Transaction t = walletService.acceptRequest(txnId, body.pin());
+        return ResponseEntity.ok(ApiResponse.success(mapTx(t), "Request fulfilled"));
     }
 
-    // NEW: Decline an incoming money request
     @PostMapping("/request/decline/{txnId}")
-    public ResponseEntity<Transaction> declineRequest(@PathVariable Long txnId) {
-        User user = getAuthenticatedUser();
-        return ResponseEntity.ok(walletService.declineRequest(user.getUserId(), txnId));
+    public ResponseEntity<ApiResponse<TransactionDTO>> declineRequest(@PathVariable Long txnId, Authentication auth) {
+        Transaction t = walletService.declineRequest(getAuthenticatedUser(auth).getUserId(), txnId);
+        return ResponseEntity.ok(ApiResponse.success(mapTx(t), "Request declined"));
     }
 
-    // NEW: Cancel an outgoing pending request
     @PostMapping("/request/cancel/{txnId}")
-    public ResponseEntity<Transaction> cancelOutgoingRequest(@PathVariable Long txnId) {
-        User user = getAuthenticatedUser();
-        return ResponseEntity.ok(walletService.cancelOutgoingRequest(user.getUserId(), txnId));
+    public ResponseEntity<ApiResponse<TransactionDTO>> cancelOutgoingRequest(@PathVariable Long txnId, Authentication auth) {
+        Transaction t = walletService.cancelOutgoingRequest(getAuthenticatedUser(auth).getUserId(), txnId);
+        return ResponseEntity.ok(ApiResponse.success(mapTx(t), "Request cancelled"));
     }
 
-    // NEW: Get all incoming pending requests
     @GetMapping("/requests/incoming")
-    public ResponseEntity<List<Transaction>> getIncomingRequests() {
-        User user = getAuthenticatedUser();
-        return ResponseEntity.ok(walletService.getIncomingRequests(user.getUserId()));
+    public ResponseEntity<ApiResponse<Page<TransactionDTO>>> getIncoming(@PageableDefault(size = 10) Pageable p, Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success(walletService.getIncomingRequestsPaged(getAuthenticatedUser(auth).getUserId(), p).map(this::mapTx), "Incoming requests fetched"));
     }
 
-    // NEW: Get all outgoing pending requests
     @GetMapping("/requests/outgoing")
-    public ResponseEntity<List<Transaction>> getOutgoingRequests() {
-        User user = getAuthenticatedUser();
-        return ResponseEntity.ok(walletService.getOutgoingRequests(user.getUserId()));
+    public ResponseEntity<ApiResponse<Page<TransactionDTO>>> getOutgoing(@PageableDefault(size = 10) Pageable p, Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success(walletService.getOutgoingRequestsPaged(getAuthenticatedUser(auth).getUserId(), p).map(this::mapTx), "Outgoing requests fetched"));
     }
 
-    // --- 3. HISTORY, FILTERING, SEARCH & EXPORT (UPDATED) ---
+    // --- 3. SEARCH & ADVANCED FILTERING ---
 
     @GetMapping("/transactions")
-    public ResponseEntity<List<Transaction>> getHistory(@RequestParam(required = false) String type) {
-        User user = getAuthenticatedUser();
-        if (type != null && !type.isEmpty()) {
-            return ResponseEntity.ok(walletService.getMyHistory(user, type));
-        }
-        return ResponseEntity.ok(walletService.getTransactionHistory(user.getUserId()));
+    public ResponseEntity<ApiResponse<Page<TransactionDTO>>> getHistory(@RequestParam(required = false) String type, @PageableDefault(size = 20) Pageable p, Authentication auth) {
+        User user = getAuthenticatedUser(auth);
+        Page<Transaction> res = (type != null && !type.isEmpty()) ? walletService.getMyHistoryPaged(user, type, p) : walletService.getTransactionHistoryPaged(user.getUserId(), p);
+        return ResponseEntity.ok(ApiResponse.success(res.map(this::mapTx), "History retrieved"));
     }
 
-    // Filter transactions with query parameters (GET)
     @GetMapping("/transactions/filter")
-    public ResponseEntity<List<Transaction>> filterTransactions(
+    public ResponseEntity<ApiResponse<Page<TransactionDTO>>> filter(
             @RequestParam(required = false) String type,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) BigDecimal minAmount,
-            @RequestParam(required = false) BigDecimal maxAmount) {
-        User user = getAuthenticatedUser();
-        return ResponseEntity.ok(walletService.filterTransactions(
-                user.getUserId(), type, startDate, endDate, status, minAmount, maxAmount));
+            @RequestParam(required = false) BigDecimal minAmount, @RequestParam(required = false) BigDecimal maxAmount,
+            @PageableDefault(size = 20) Pageable p, Authentication auth) {
+        Page<Transaction> filtered = walletService.filterTransactionsPaged(getAuthenticatedUser(auth).getUserId(), type, startDate, endDate, status, minAmount, maxAmount, p);
+        return ResponseEntity.ok(ApiResponse.success(filtered.map(this::mapTx), "Filtered results retrieved"));
     }
 
-    // NEW: Filter transactions using DTO (POST with JSON body) - This uses TransactionFilterDTO!
     @PostMapping("/transactions/filter")
-    public ResponseEntity<List<Transaction>> filterTransactionsUsingDTO(@RequestBody TransactionFilterDTO filter) {
-        User user = getAuthenticatedUser();
-        return ResponseEntity.ok(walletService.filterTransactions(
-                user.getUserId(),
-                filter.getType(),
-                filter.getStartDate(),
-                filter.getEndDate(),
-                filter.getStatus(),
-                filter.getMinAmount(),
-                filter.getMaxAmount()
-        ));
+    public ResponseEntity<ApiResponse<Page<TransactionDTO>>> filterUsingDTO(@RequestBody TransactionFilterDTO filter, @PageableDefault(size = 20) Pageable p, Authentication auth) {
+        Page<Transaction> filtered = walletService.filterTransactionsPaged(getAuthenticatedUser(auth).getUserId(), filter.getType(), filter.getStartDate(), filter.getEndDate(), filter.getStatus(), filter.getMinAmount(), filter.getMaxAmount(), p);
+        return ResponseEntity.ok(ApiResponse.success(filtered.map(this::mapTx), "Filtered results retrieved"));
     }
 
-    // Search transactions by keyword
     @GetMapping("/transactions/search")
-    public ResponseEntity<List<Transaction>> searchTransactions(
-            @RequestParam String keyword) {
-        User user = getAuthenticatedUser();
-        return ResponseEntity.ok(walletService.searchTransactions(user.getUserId(), keyword));
+    public ResponseEntity<ApiResponse<Page<TransactionDTO>>> search(@RequestParam String keyword, @PageableDefault(size = 20) Pageable p, Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success(walletService.searchTransactionsPaged(getAuthenticatedUser(auth).getUserId(), keyword, p).map(this::mapTx), "Search results retrieved"));
     }
 
-    // Export transactions to CSV
-    @GetMapping("/transactions/export/csv")
-    public ResponseEntity<String> exportToCSV() {
-        User user = getAuthenticatedUser();
-        String csv = walletService.exportTransactionsToCSV(user.getUserId());
-
-        return ResponseEntity.ok()
-                .header("Content-Disposition", "attachment; filename=transactions.csv")
-                .header("Content-Type", "text/csv")
-                .body(csv);
-    }
-
-    // Export transactions to PDF
-    @GetMapping("/transactions/export/pdf")
-    public ResponseEntity<byte[]> exportToPDF() {
-        User user = getAuthenticatedUser();
-        byte[] pdf = walletService.exportTransactionsToPDF(user.getUserId());
-
-        return ResponseEntity.ok()
-                .header("Content-Disposition", "attachment; filename=transactions.pdf")
-                .header("Content-Type", "application/pdf")
-                .body(pdf);
-    }
+    // --- 4. ANALYTICS & REPORT EXPORT ---
 
     @GetMapping("/analytics")
-    public ResponseEntity<WalletAnalyticsDTO> getAnalytics() {
-        return ResponseEntity.ok(walletService.getSpendingAnalytics(getAuthenticatedUser()));
+    public ResponseEntity<ApiResponse<WalletAnalyticsDTO>> getAnalytics(Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success(walletService.getSpendingAnalytics(getAuthenticatedUser(auth)), "Analytics calculated"));
     }
 
-    // --- 4. CARD MANAGEMENT (UPDATED) ---
+    @GetMapping("/transactions/export/csv")
+    public ResponseEntity<String> exportCsv(Authentication auth) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=revpay_report.csv")
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(walletService.exportTransactionsToCSV(getAuthenticatedUser(auth).getUserId()));
+    }
+
+    @GetMapping("/transactions/export/pdf")
+    public ResponseEntity<byte[]> exportPdf(Authentication auth) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=revpay_report.pdf")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(walletService.exportTransactionsToPDF(getAuthenticatedUser(auth).getUserId()));
+    }
+
+    // --- 5. SAVED PAYMENT METHODS ---
 
     @GetMapping("/cards")
-    public ResponseEntity<List<PaymentMethod>> getMyCards() {
-        return ResponseEntity.ok(walletService.getCards(getAuthenticatedUser().getUserId()));
+    public ResponseEntity<ApiResponse<Page<PaymentMethodDTO>>> getCards(@PageableDefault(size = 10) Pageable p, Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success(walletService.getCardsPaged(getAuthenticatedUser(auth).getUserId(), p).map(this::mapCard), "Saved cards retrieved"));
     }
 
     @PostMapping("/cards")
-    public ResponseEntity<PaymentMethod> addCard(@RequestBody PaymentMethod card) {
-        return ResponseEntity.ok(walletService.addCard(getAuthenticatedUser().getUserId(), card));
+    public ResponseEntity<ApiResponse<PaymentMethodDTO>> addCard(@Valid @RequestBody CardPayload payload, Authentication auth) {
+        // Map DTO to Entity manually to prevent mass assignment
+        PaymentMethod card = new PaymentMethod();
+        card.setCardNumber(payload.cardNumber());
+        card.setExpiryDate(payload.expiryDate());
+        card.setBillingAddress(payload.billingAddress());
+        // cardType and CVV can be mapped here based on your entity structure
+
+        PaymentMethod savedCard = walletService.addCard(getAuthenticatedUser(auth).getUserId(), card);
+        return ResponseEntity.ok(ApiResponse.success(mapCard(savedCard), "Card linked successfully"));
     }
 
-    // Update card details (expiry, billing address)
     @PutMapping("/cards/{cardId}")
-    public ResponseEntity<PaymentMethod> updateCard(
-            @PathVariable Long cardId,
-            @RequestBody PaymentMethod card) {
-        User user = getAuthenticatedUser();
-        return ResponseEntity.ok(walletService.updateCard(user.getUserId(), cardId, card));
+    public ResponseEntity<ApiResponse<PaymentMethodDTO>> updateCard(@PathVariable Long cardId, @Valid @RequestBody CardPayload payload, Authentication auth) {
+        PaymentMethod card = new PaymentMethod();
+        card.setCardNumber(payload.cardNumber());
+        card.setExpiryDate(payload.expiryDate());
+        card.setBillingAddress(payload.billingAddress());
+
+        PaymentMethod updatedCard = walletService.updateCard(getAuthenticatedUser(auth).getUserId(), cardId, card);
+        return ResponseEntity.ok(ApiResponse.success(mapCard(updatedCard), "Card updated successfully"));
     }
 
     @DeleteMapping("/cards/{cardId}")
-    public ResponseEntity<Map<String, String>> deleteCard(@PathVariable Long cardId) {
-        walletService.deleteCard(getAuthenticatedUser().getUserId(), cardId);
-        return ResponseEntity.ok(Map.of("message", "Card deleted successfully"));
+    public ResponseEntity<ApiResponse<String>> deleteCard(@PathVariable Long cardId, Authentication auth) {
+        walletService.deleteCard(getAuthenticatedUser(auth).getUserId(), cardId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Card unlinked successfully"));
     }
 
     @PostMapping("/cards/default/{cardId}")
-    public ResponseEntity<Map<String, String>> setDefault(@PathVariable Long cardId) {
-        walletService.setDefaultCard(getAuthenticatedUser().getUserId(), cardId);
-        return ResponseEntity.ok(Map.of("message", "Default card updated"));
+    public ResponseEntity<ApiResponse<String>> setDefault(@PathVariable Long cardId, Authentication auth) {
+        walletService.setDefaultCard(getAuthenticatedUser(auth).getUserId(), cardId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Primary payment method updated"));
     }
 }

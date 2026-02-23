@@ -1,6 +1,9 @@
-package com.revpay.security;
+package com.revpay.config;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.revpay.security.JwtAuthenticationEntryPoint;
+import com.revpay.security.JwtAuthenticationFilter;
+import com.revpay.security.JwtUtils;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -10,6 +13,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -23,74 +27,57 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
-    @Autowired
-    private JwtAuthenticationEntryPoint unauthorizedHandler;
-
-
-    @Bean
-    public JwtAuthenticationFilter jwtAuthenticationFilter() {
-        return new JwtAuthenticationFilter();
-    }
-
+    // Constructor injection for better testability and immutability
+    private final JwtAuthenticationEntryPoint unauthorizedHandler;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig)
-            throws Exception {
-
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
         return authConfig.getAuthenticationManager();
     }
 
-
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-
         CorsConfiguration configuration = new CorsConfiguration();
 
         configuration.setAllowedOrigins(List.of("http://localhost:4200"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
-        configuration.setAllowedMethods(
-                List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-
-        configuration.setAllowedHeaders(
-                List.of("Authorization", "Content-Type"));
-
+        // CRITICAL FIX: Added "Idempotency-Key" so the frontend can send it without CORS blocking
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key"));
         configuration.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
+        // Added caching for preflight requests (improves frontend performance)
+        configuration.setMaxAge(3600L);
 
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
-
         return source;
     }
 
-
-
+    // FIXED: Only keeping the correct bean with the required parameters
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public JwtAuthenticationFilter authenticationJwtTokenFilter(JwtUtils jwtUtils, UserDetailsService userDetailsService) {
+        return new JwtAuthenticationFilter(jwtUtils, userDetailsService);
+    }
+
+    // FIXED: Inject the customized JwtAuthenticationFilter directly into the filterChain method
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
 
         http
-
                 .csrf(csrf -> csrf.disable())
-
-                .cors(Customizer.withDefaults())
-
-                .exceptionHandling(exception ->
-                        exception.authenticationEntryPoint(unauthorizedHandler))
-
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
+                .cors(Customizer.withDefaults()) // Hooks into the CorsConfigurationSource bean above
+                .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-
                         .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/v3/api-docs",
@@ -100,21 +87,17 @@ public class SecurityConfig {
                                 "/v3/api-docs/swagger-config"
                         ).permitAll()
 
-                        // your existing public APIs
+                        // Public APIs
                         .requestMatchers("/api/auth/**").permitAll()
-
                         .requestMatchers("/api/public/**").permitAll()
 
-                        // everything else secure
+                        // Everything else must be secured with a JWT
                         .anyRequest().authenticated()
                 );
 
-
-        http.addFilterBefore(jwtAuthenticationFilter(),
-                UsernamePasswordAuthenticationFilter.class);
-
+        // Inject our custom JWT filter before the standard Spring Username/Password filter
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
-
 }
