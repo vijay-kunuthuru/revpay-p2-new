@@ -24,6 +24,12 @@ import org.springframework.retry.annotation.Retryable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.lowagie.text.Document;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
+import java.io.ByteArrayOutputStream;
+import java.util.List;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -624,7 +630,56 @@ public class WalletService {
 
     @Transactional(readOnly = true)
     public byte[] exportTransactionsToPDF(Long userId) {
-        return exportTransactionsToCSV(userId).getBytes();
+        // 1. Fetch the exact same data as the CSV method
+        List<Transaction> transactions = getTransactionHistory(userId);
+
+        // 2. Build the actual PDF document
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Document document = new Document();
+            PdfWriter.getInstance(document, out);
+            document.open();
+
+            // Add Title and a blank line for spacing
+            document.add(new Paragraph("Transaction History for User: " + userId));
+            document.add(new Paragraph(" "));
+
+            // Initialize table with 8 columns (matching your CSV exactly)
+            PdfPTable table = new PdfPTable(8);
+            table.setWidthPercentage(100); // Make it span the full page width
+
+            // Add Table Headers
+            table.addCell("Transaction ID");
+            table.addCell("Date");
+            table.addCell("Type");
+            table.addCell("Amount");
+            table.addCell("Status");
+            table.addCell("Sender");
+            table.addCell("Receiver");
+            table.addCell("Description");
+
+            // Loop through transactions and add rows
+            for (Transaction t : transactions) {
+                table.addCell(t.getTransactionRef() != null ? t.getTransactionRef() : "N/A");
+                table.addCell(t.getTimestamp() != null ? t.getTimestamp().toString() : "N/A");
+                table.addCell(t.getType() != null ? t.getType().toString() : "N/A");
+                table.addCell(t.getAmount() != null ? t.getAmount().toString() : "0.00");
+                table.addCell(t.getStatus() != null ? t.getStatus().toString() : "N/A");
+
+                // Re-using your exact CSV logic for Sender and Receiver
+                table.addCell(t.getSender() != null ? t.getSender().getFullName() : "N/A");
+                table.addCell(t.getReceiver() != null ? t.getReceiver().getFullName() : "N/A");
+                table.addCell(t.getDescription() != null ? t.getDescription() : "");
+            }
+
+            // CRITICAL: Draw the table onto the document!
+            document.add(table);
+
+            document.close();
+            return out.toByteArray();
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to generate PDF", e);
+        }
     }
 
     // --- 8. ANALYTICS ---
