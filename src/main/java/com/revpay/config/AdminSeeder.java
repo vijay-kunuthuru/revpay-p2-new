@@ -19,7 +19,7 @@ public class AdminSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        // Only create the admin if they don't already exist!
+
         if (!userRepository.existsByEmail("admin@revpay.com")) {
             log.info("Seeding default Admin user into the database...");
 
@@ -27,9 +27,9 @@ public class AdminSeeder implements CommandLineRunner {
             admin.setFullName("System Admin");
             admin.setEmail("admin@revpay.com");
             admin.setPhoneNumber("0000000000");
-            admin.setRole(Role.ADMIN); // Sets the exact role needed
+            admin.setRole(Role.ADMIN);
             
-            // Uses your actual encoder so login works perfectly!
+
             admin.setPasswordHash(passwordEncoder.encode("admin123"));
             admin.setTransactionPinHash(passwordEncoder.encode("0000"));
             admin.setSecurityQuestion("Admin Code?");
