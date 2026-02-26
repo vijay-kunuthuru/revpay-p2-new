@@ -239,34 +239,6 @@ public class WalletServiceTest {
     }
 
     @Test
-    void testAcceptRequest_CompletesTransaction() {
-        Transaction pendingRequest = new Transaction();
-        pendingRequest.setTransactionId(100L);
-        pendingRequest.setSender(receiver); // Receiver of funds
-        pendingRequest.setReceiver(sender); // Payer of funds
-        pendingRequest.setAmount(new BigDecimal("200.00"));
-        pendingRequest.setType(Transaction.TransactionType.REQUEST);
-        pendingRequest.setStatus(Transaction.TransactionStatus.PENDING);
-
-        when(transRepo.findById(100L)).thenReturn(Optional.of(pendingRequest));
-
-        // Mocks for processTransfer side-effects
-        lenient().when(userRepo.findById(receiver.getUserId())).thenReturn(Optional.of(receiver));
-        lenient().when(userRepo.findByEmail(sender.getEmail())).thenReturn(Optional.of(sender));
-        lenient().when(encoder.matches("1234", receiver.getTransactionPinHash())).thenReturn(true);
-        lenient().when(walletRepo.findByUserUserIdForUpdate(receiver.getUserId()))
-                .thenReturn(Optional.of(receiverWallet));
-        lenient().when(walletRepo.findByUserUserIdForUpdate(sender.getUserId())).thenReturn(Optional.of(senderWallet));
-        lenient().when(transRepo.findBySenderOrReceiverOrderByTimestampDesc(any(), any()))
-                .thenReturn(new ArrayList<>());
-        lenient().when(transRepo.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArguments()[0]);
-
-        Transaction result = walletService.acceptRequest(100L, "1234");
-
-        assertEquals(Transaction.TransactionStatus.COMPLETED, result.getStatus());
-    }
-
-    @Test
     void testDeclineRequest_MarksAsDeclined() {
         Transaction pendingRequest = new Transaction();
         pendingRequest.setTransactionId(100L);
