@@ -15,6 +15,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByPhoneNumber(String phoneNumber);
 
+    java.util.List<User> findByRole(com.revpay.model.entity.Role role);
+
     Boolean existsByEmail(String email);
 
     Boolean existsByPhoneNumber(String phoneNumber);

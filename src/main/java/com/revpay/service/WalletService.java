@@ -134,6 +134,11 @@ public class WalletService {
 
     @Transactional
     public Transaction requestMoney(Long requesterId, String targetEmail, BigDecimal amount) {
+        return requestMoney(requesterId, targetEmail, amount, null);
+    }
+
+    @Transactional
+    public Transaction requestMoney(Long requesterId, String targetEmail, BigDecimal amount, String description) {
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> new ResourceNotFoundException("Requester not found"));
         User target = userRepository.findByEmail(targetEmail)
@@ -146,7 +151,7 @@ public class WalletService {
         request.setType(Transaction.TransactionType.REQUEST);
         request.setStatus(Transaction.TransactionStatus.PENDING);
         request.setTransactionRef(generateRef());
-        request.setDescription("Money request from " + requester.getFullName());
+        request.setDescription(description != null ? description : "Money request from " + requester.getFullName());
 
         log.info("REQUEST | CREATED | From: {} | To: {}", requester.getEmail(), targetEmail);
 
@@ -804,17 +809,48 @@ public class WalletService {
             DeadlockLoserDataAccessException.class }, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0))
     @Transactional
     public Transaction withdrawFundsForLoan(Long userId, BigDecimal amount, String description) {
-        Wallet wallet = walletRepository.findByUserUserIdForUpdate(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Wallet not found"));
-        if (wallet.getBalance().compareTo(amount) < 0) {
+        // Find Admin Wallet
+        List<User> admins = userRepository.findByRole(com.revpay.model.entity.Role.ADMIN);
+        if (admins.isEmpty()) {
+            throw new ResourceNotFoundException("Admin user not found to credit loan repayment");
+        }
+        User adminUser = admins.get(0);
+
+        Wallet adminWallet;
+        Wallet senderWallet;
+
+        if (userId < adminUser.getUserId()) {
+             senderWallet = walletRepository.findByUserUserIdForUpdate(userId)
+                 .orElseThrow(() -> new ResourceNotFoundException("Wallet not found"));
+             adminWallet = walletRepository.findByUserUserIdForUpdate(adminUser.getUserId())
+                 .orElseThrow(() -> new ResourceNotFoundException("Admin wallet not found"));
+        } else if (userId > adminUser.getUserId()) {
+             adminWallet = walletRepository.findByUserUserIdForUpdate(adminUser.getUserId())
+                 .orElseThrow(() -> new ResourceNotFoundException("Admin wallet not found"));
+             senderWallet = walletRepository.findByUserUserIdForUpdate(userId)
+                 .orElseThrow(() -> new ResourceNotFoundException("Wallet not found"));
+        } else {
+             senderWallet = walletRepository.findByUserUserIdForUpdate(userId)
+                 .orElseThrow(() -> new ResourceNotFoundException("Wallet not found"));
+             adminWallet = senderWallet;
+        }
+
+        if (senderWallet.getBalance().compareTo(amount) < 0) {
             throw new InsufficientBalanceException("Insufficient balance for loan repayment");
         }
 
-        wallet.setBalance(wallet.getBalance().subtract(amount));
-        walletRepository.save(wallet);
+        senderWallet.setBalance(senderWallet.getBalance().subtract(amount));
+        
+        if (!userId.equals(adminUser.getUserId())) {
+             adminWallet.setBalance(adminWallet.getBalance().add(amount));
+             walletRepository.save(adminWallet);
+        }
+        
+        walletRepository.save(senderWallet);
 
         Transaction tx = new Transaction();
-        tx.setSender(wallet.getUser());
+        tx.setSender(senderWallet.getUser());
+        tx.setReceiver(adminWallet.getUser());
         tx.setAmount(amount);
         tx.setType(Transaction.TransactionType.LOAN_REPAYMENT);
         tx.setStatus(Transaction.TransactionStatus.COMPLETED);

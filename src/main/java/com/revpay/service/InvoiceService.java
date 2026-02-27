@@ -118,14 +118,15 @@ public class InvoiceService {
                     com.revpay.model.entity.Transaction reqTx = walletService.requestMoney(
                             invoice.getBusinessProfile().getUser().getUserId(),
                             customer.getEmail(),
-                            invoice.getTotalAmount());
+                            invoice.getTotalAmount(),
+                            "Invoice #" + invoice.getId() + " from " + invoice.getBusinessProfile().getBusinessName());
                     invoice.setLinkedTransactionId(reqTx.getTransactionId());
                     invoiceRepository.save(invoice);
 
                     notificationService.createNotification(
                             customer.getUserId(),
                             "You have a new invoice of ₹" + invoice.getTotalAmount() + " from "
-                                    + invoice.getCustomerName(), // MESSAGE GOES SECOND
+                                    + invoice.getBusinessProfile().getBusinessName(), // MESSAGE GOES SECOND
                             "INVOICE" // TYPE GOES THIRD
                     );
                     log.info("INVOICE_NOTIFICATION | Sent alert to User ID: {}", customer.getUserId());

@@ -64,6 +64,14 @@ public class LoanService {
         loanRepository.save(loan);
         log.info("Loan application saved with id: {}", loan.getLoanId());
 
+        User admin = userRepository.findByRole(Role.ADMIN).stream().findFirst().orElse(null);
+        if (admin != null) {
+            notificationService.createNotification(
+                    admin.getUserId(),
+                    "New loan application of ₹" + dto.getAmount() + " from " + user.getFullName(),
+                    "LOAN_REQUEST");
+        }
+
         notificationService.createNotification(
                 user.getUserId(),
                 NotificationUtil.loanApplied(dto.getAmount()),
@@ -230,6 +238,14 @@ public class LoanService {
                 "LOAN");
         log.info("Repayment notification sent for loanId: {}", loan.getLoanId());
 
+        User admin = userRepository.findByRole(Role.ADMIN).stream().findFirst().orElse(null);
+        if (admin != null) {
+            notificationService.createNotification(
+                    admin.getUserId(),
+                    "Received loan EMI payment of ₹" + payableAmount + " from " + loan.getUser().getFullName(),
+                    "LOAN_REPAYMENT");
+        }
+
         return "EMI Paid Successfully";
     }
 
@@ -276,6 +292,14 @@ public class LoanService {
                 "Your loan has been pre-closed successfully.",
                 "LOAN");
         log.info("Pre-closure notification sent to userId: {}", loan.getUser().getUserId());
+
+        User admin = userRepository.findByRole(Role.ADMIN).stream().findFirst().orElse(null);
+        if (admin != null) {
+            notificationService.createNotification(
+                    admin.getUserId(),
+                    "Loan pre-closure payment of ₹" + totalPayable + " received from " + loan.getUser().getFullName(),
+                    "LOAN_REPAYMENT");
+        }
 
         return "Loan Pre-closed successfully";
     }
