@@ -27,6 +27,7 @@ public class AdminService {
     private final UserRepository userRepository;
     private final TransactionRepository transactionRepository;
     private final BusinessProfileRepository businessProfileRepository;
+    private final com.revpay.repository.WalletRepository walletRepository;
 
     // --- USER MANAGEMENT ---
 
@@ -90,11 +91,27 @@ public class AdminService {
                 .map(Transaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        // Calculate Admin Wallet Balance
+        BigDecimal adminWalletBalance = BigDecimal.ZERO;
+        User adminUser = userRepository.findByRole(Role.ADMIN).stream().findFirst().orElse(null);
+        if (adminUser != null) {
+            com.revpay.model.entity.Wallet adminWallet = adminUser.getWallet();
+            // If the LAZY relationship isn't initialized or not available directly, we fetch via repository
+            if (adminWallet != null) {
+                adminWalletBalance = adminWallet.getBalance();
+            } else {
+                adminWalletBalance = walletRepository.findByUser(adminUser)
+                    .map(com.revpay.model.entity.Wallet::getBalance)
+                    .orElse(BigDecimal.ZERO);
+            }
+        }
+        
         Map<String, Object> analytics = new HashMap<>();
         analytics.put("totalUsers", totalUsers);
         analytics.put("activeBusinesses", activeBusinesses);
         analytics.put("totalTransactions", totalTransactions);
         analytics.put("totalVolume", estimatedVolume);
+        analytics.put("adminWalletBalance", adminWalletBalance);
 
         return analytics;
     }

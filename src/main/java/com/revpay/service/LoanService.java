@@ -285,6 +285,13 @@ public class LoanService {
         loan.setRemainingAmount(BigDecimal.ZERO);
         loan.setStatus(LoanStatus.CLOSED);
         loanRepository.save(loan);
+        
+        List<LoanInstallment> installments = installmentRepository.findByLoan_LoanId(loanId);
+        installments.stream()
+                .filter(i -> i.getStatus() == InstallmentStatus.PENDING || i.getStatus() == InstallmentStatus.OVERDUE)
+                .forEach(i -> i.setStatus(InstallmentStatus.CANCELLED));
+        installmentRepository.saveAll(installments);
+        
         log.info("Loan successfully pre-closed for loanId: {}", loanId);
 
         notificationService.createNotification(
@@ -383,10 +390,14 @@ public class LoanService {
         log.info("Fetching overdue EMIs for userId: {}", userId);
 
         List<LoanInstallment> overdueList = new ArrayList<>(
-                installmentRepository.findByUserIdAndStatus(userId, InstallmentStatus.OVERDUE));
+                installmentRepository.findByUserIdAndStatus(userId, InstallmentStatus.OVERDUE)
+                        .stream()
+                        .filter(i -> i.getLoan().getStatus() == com.revpay.model.entity.LoanStatus.ACTIVE)
+                        .toList());
 
         installmentRepository.findByUserIdAndStatus(userId, InstallmentStatus.PENDING)
                 .stream()
+                .filter(i -> i.getLoan().getStatus() == com.revpay.model.entity.LoanStatus.ACTIVE)
                 .filter(i -> i.getDueDate().isBefore(LocalDate.now()))
                 .forEach(overdueList::add);
 
@@ -397,11 +408,17 @@ public class LoanService {
     @Transactional(readOnly = true)
     public Page<LoanInstallment> getOverdueEmisPaged(Long userId, Pageable pageable) {
         log.info("Fetching paginated overdue EMIs for userId: {}", userId);
-        // Note: For pagination, querying strictly on status OVERDUE or filtering via
-        // query is required.
-        // If a hybrid logic is needed, the repository query must reflect `status =
-        // OVERDUE OR (status = PENDING AND dueDate < CURRENT_DATE)`
-        return installmentRepository.findOverdueByUserId(userId, LocalDate.now(), pageable);
+        
+        List<LoanInstallment> allActiveOverdues = getOverdueEmis(userId);
+        
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), allActiveOverdues.size());
+        
+        List<LoanInstallment> pageContent = (start <= end && start < allActiveOverdues.size()) 
+                ? allActiveOverdues.subList(start, end) 
+                : List.of();
+                
+        return new org.springframework.data.domain.PageImpl<>(pageContent, pageable, allActiveOverdues.size());
     }
 
     @Transactional(readOnly = true)
@@ -425,6 +442,7 @@ public class LoanService {
         BigDecimal total = installmentRepository
                 .findByUserIdAndStatus(userId, InstallmentStatus.PENDING)
                 .stream()
+                .filter(i -> i.getLoan().getStatus() == com.revpay.model.entity.LoanStatus.ACTIVE)
                 .map(LoanInstallment::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
