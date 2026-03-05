@@ -1,0 +1,10 @@
+/* Scoped CSS for Admin Users */
+.avatar {
+    width: 40px;
+    height: 40px;
+    font-weight: bold;
+}
+
+.icon-fixed-width {
+    width: 16px;
+}

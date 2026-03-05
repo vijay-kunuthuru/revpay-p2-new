@@ -1,0 +1,14 @@
+<div class="business-container">
+    <nav class="sidebar">
+        <h2 class="sidebar-title">Business Hub</h2>
+        <ul>
+            <li><a routerLink="/business/dashboard" routerLinkActive="active">Dashboard</a></li>
+            <li><a routerLink="/business/invoices" routerLinkActive="active">Invoices</a></li>
+            <li><a routerLink="/business/loans" routerLinkActive="active">Loans</a></li>
+            <li class="logout-li"><button class="logout-btn" (click)="logout()">Logout</button></li>
+        </ul>
+    </nav>
+    <main class="content">
+        <router-outlet></router-outlet>
+    </main>
+</div>

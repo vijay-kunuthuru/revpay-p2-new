@@ -1,0 +1,94 @@
+.premium-balance-card {
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0d6efd 0%, #0dcaf0 100%);
+}
+
+.premium-balance-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 60%);
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.balance-amount {
+    letter-spacing: -1px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.balance-label {
+    opacity: 0.9;
+}
+
+.txn-item {
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    cursor: default;
+}
+
+.txn-item:hover {
+    background-color: #f8f9fa;
+    transform: translateX(5px);
+    border-left: 3px solid #007bff !important;
+}
+
+.empty-txn-item {
+    font-style: italic;
+}
+
+.empty-icon {
+    opacity: 0.5;
+}
+
+.badge {
+    font-size: 0.7rem;
+    letter-spacing: 0.5px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    background-color: #e9ecef;
+    color: #495057;
+    border: 1px solid #dee2e6;
+    text-transform: uppercase;
+}
+
+/* Custom badge colors mapping to transaction types */
+.DEPOSIT,
+.ADD_FUNDS {
+    background-color: #d1e7dd !important;
+    color: #0f5132 !important;
+    border: 1px solid #badbcc;
+}
+
+.TRANSFER {
+    background-color: #cff4fc !important;
+    color: #055160 !important;
+    border: 1px solid #b6effb;
+}
+
+.PAYMENT {
+    background-color: #fff3cd !important;
+    color: #664d03 !important;
+    border: 1px solid #ffecb5;
+}
+
+.WITHDRAWAL {
+    background-color: #f8d7da !important;
+    color: #842029 !important;
+    border: 1px solid #f5c2c7;
+}
+
+.REQUEST {
+    background-color: #e2e3e5 !important;
+    color: #41464b !important;
+    border: 1px solid #d3d6d8;
+}
+
+.LOAN_DISBURSEMENT {
+    background-color: #e0cffc !important;
+    color: #3b0a96 !important;
+    border: 1px solid #ccb2fc;
+}

@@ -1,0 +1,12 @@
+<div class="container">
+    <h2>Send Money</h2>
+    <form [formGroup]="sendForm" (ngSubmit)="onSubmit()">
+        <div class="form-group"><label>Receiver Email/Phone</label><input placeholder="Receiver Identifier" title="Receiver Identifier" type="text"
+                formControlName="receiverIdentifier"></div>
+        <div class="form-group"><label>Amount</label><input placeholder="Amount" title="Amount" type="number" formControlName="amount"></div>
+        <div class="form-group"><label>Description</label><input placeholder="Description" title="Description" type="text" formControlName="description"></div>
+        <div class="form-group"><label>Transaction PIN</label><input placeholder="Transaction Pin" title="Transaction Pin" type="password" formControlName="transactionPin">
+        </div>
+        <button type="submit" [disabled]="sendForm.invalid">Send</button>
+    </form>
+</div>

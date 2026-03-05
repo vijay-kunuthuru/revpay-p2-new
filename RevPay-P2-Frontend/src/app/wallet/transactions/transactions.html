@@ -1,0 +1,108 @@
+<div class="container">
+  <div class="header-row">
+    <h2>Transaction History</h2>
+    <button type="button" class="btn-primary" (click)="exportToPdf()" [disabled]="isExporting">
+      {{ isExporting ? 'Exporting...' : 'Export to PDF' }}
+    </button>
+  </div>
+
+  <div class="filter-card">
+    <h3>Filter Transactions</h3>
+    <form [formGroup]="filterForm" (ngSubmit)="applyFilter()" class="filter-form">
+      <div class="form-row">
+        <div class="form-group quarter">
+          <label>Type</label>
+          <select title="Type" formControlName="type">
+            <option value="">All Types</option>
+            <option value="TRANSFER">Transfer</option>
+            <option value="DEPOSIT">Deposit</option>
+            <option value="WITHDRAWAL">Withdrawal</option>
+            <option value="PAYMENT">Payment</option>
+          </select>
+        </div>
+
+        <div class="form-group quarter">
+          <label>Status</label>
+          <select title="Status" formControlName="status">
+            <option value="">All Statuses</option>
+            <option value="PENDING">Pending</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="FAILED">Failed</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+        </div>
+
+        <div class="form-group quarter">
+          <label>Min Amount</label>
+          <input title="Min Amount" type="number" formControlName="minAmount" placeholder="0.00">
+        </div>
+
+        <div class="form-group quarter">
+          <label>Max Amount</label>
+          <input title="Max Amount" type="number" formControlName="maxAmount" placeholder="0.00">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label>Start Date</label>
+          <input title="Start Date" type="datetime-local" formControlName="startDate">
+        </div>
+        <div class="form-group half">
+          <label>End Date</label>
+          <input title="End Date" type="datetime-local" formControlName="endDate">
+        </div>
+      </div>
+
+      <div class="filter-actions">
+        <button type="submit" class="btn-primary">Apply Filters</button>
+        <button type="button" class="btn-outline" (click)="resetFilter()">Clear</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="transactions-list">
+    @if (transactions.length === 0) {
+      <div class="no-data">No transactions found.</div>
+    }
+
+    @if (transactions.length > 0) {
+      <table class="txn-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Ref #</th>
+            <th>Description</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (txn of transactions; track txn) {
+            <tr>
+              <td>{{ txn.timestamp | date:'short' }}</td>
+              <td class="ref">{{ txn.transactionRef }}</td>
+              <td>{{ sanitizeDescription(txn.description) }}</td>
+              <td><span class="badge badge-type">{{ txn.type }}</span></td>
+              <td><span class="badge badge-status" [ngClass]="txn.status">{{ txn.status }}</span></td>
+              <td class="amount fw-bold" [class.text-success]="!isOutgoing(txn)"
+                [class.text-danger]="isOutgoing(txn)">
+                {{ isOutgoing(txn) ? '-' : '+' }}₹{{ abs(txn.amount) | number:'1.2-2' }}
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    @if (totalPages > 1) {
+      <div class="pagination">
+        <button [disabled]="currentPage === 0" (click)="changePage(currentPage - 1)">&laquo; Prev</button>
+        <span>Page {{currentPage + 1}} of {{totalPages}}</span>
+        <button [disabled]="currentPage >= totalPages - 1" (click)="changePage(currentPage + 1)">Next
+        &raquo;</button>
+      </div>
+    }
+  </div>
+</div>

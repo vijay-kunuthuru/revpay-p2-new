@@ -1,0 +1,69 @@
+<div class="container">
+  <h2>My Payment Methods</h2>
+
+  <div class="cards-list">
+    <h3>Saved Cards</h3>
+    @if (cards.length === 0) {
+      <div class="no-cards">No payment methods saved.</div>
+    }
+
+    @for (card of cards; track card) {
+      <div class="card-item" [class.default]="card.isDefault">
+        <div class="card-info">
+          <span class="card-type">{{ card.cardType || 'CARD' }}</span>
+          <span class="card-number">{{ card.partialCardNumber }}</span>
+          <span class="card-expiry">Exp: {{ card.expiryDate }}</span>
+          @if (card.isDefault) {
+            <span class="badge">Default</span>
+          }
+        </div>
+        <div class="card-actions">
+          @if (!card.isDefault) {
+            <button (click)="setDefault(card.id)" class="btn-sm btn-outline">Set
+            Default</button>
+          }
+          <button (click)="deleteCard(card.id)" class="btn-sm btn-danger">Remove</button>
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="add-card-form">
+    <h3>Add New Card</h3>
+    <form [formGroup]="cardForm" (ngSubmit)="onAddCard()">
+      <div class="form-group">
+        <label>Card Number</label>
+        <input title="Card Number" type="text" formControlName="cardNumber" placeholder="16-digit card number">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label>Expiry Date (MM/YY)</label>
+          <input title="Expiry Date" type="text" formControlName="expiryDate" placeholder="MM/YY">
+        </div>
+
+        <div class="form-group half">
+          <label>CVV</label>
+          <input title="Cvv" type="password" formControlName="cvv" placeholder="123">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Card Type</label>
+        <select title="Card Type" formControlName="cardType">
+          <option value="VISA">Visa</option>
+          <option value="MASTERCARD">MasterCard</option>
+          <option value="AMEX">American Express</option>
+          <option value="DISCOVER">Discover</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Billing Address</label>
+        <input placeholder="Billing Address" title="Billing Address" type="text" formControlName="billingAddress">
+      </div>
+
+      <button type="submit" [disabled]="cardForm.invalid" class="btn-primary">Add Card</button>
+    </form>
+  </div>
+</div>
