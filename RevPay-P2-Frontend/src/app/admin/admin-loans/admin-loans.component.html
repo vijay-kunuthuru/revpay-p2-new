@@ -1,0 +1,86 @@
+<div class="loans-container">
+  <h2>Loan Applications Management</h2>
+  <p>Review and approve pending user and business loans.</p>
+
+  @if (loading) {
+  <p>Loading loans...</p>
+  }
+
+  @if (error) {
+  <div class="alert alert-danger">{{ error }}</div>
+  }
+
+  @if (loans.length > 0) {
+  <div class="table-container">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Applicant ID</th>
+          <th>Amount</th>
+          <th>Tenure</th>
+          <th>Purpose</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (loan of loans; track loan) {
+        <tr>
+          <td>#{{ loan.loanId }}</td>
+          <td>{{ loan.applicantName }} (ID: {{ loan.userId }})</td>
+          <td>₹{{ loan.amount }}</td>
+          <td>{{ loan.tenureMonths }} mos</td>
+          <td>{{ loan.purpose }}</td>
+          <td><span class="badge" [ngClass]="loan.status">{{ loan.status }}</span></td>
+          <td class="action-cell">
+            @if (loan.status === 'PENDING' || loan.status === 'APPLIED') {
+            <div class="approval-form">
+              <span class="interest-rate-label">Interest Rate (%):</span>
+              <input title="Interest Rate" type="number" [(ngModel)]="loan.proposedRate" placeholder="Rate %"
+                class="rate-input" step="0.1">
+              <button class="btn btn-success btn-sm" (click)="processLoan(loan, true)">Approve</button>
+              <button class="btn btn-danger btn-sm" (click)="processLoan(loan, false)">Reject</button>
+            </div>
+            }
+            @if (loan.status === 'APPROVED') {
+            <span>Approved at {{ loan.interestRate }}%</span>
+            }
+            @if (loan.status === 'REJECTED') {
+            <span>Rejected</span>
+            }
+            @if (loan.status === 'ACTIVE') {
+            <span>Active at {{ loan.interestRate }}%</span>
+            }
+            @if (loan.status === 'CLOSED') {
+            <span>Closed (Fully Repaid)</span>
+            }
+            @if (loan.status === 'PRE_CLOSED') {
+            <span>Pre-Closed</span>
+            }
+            @if (loan.status === 'UNDER_REVIEW') {
+            <span>Under Review</span>
+            }
+            @if (loan.status === 'DEFAULTED') {
+            <span>Defaulted</span>
+            }
+          </td>
+        </tr>
+        }
+      </tbody>
+    </table>
+    <!-- Basic Pagination -->
+    <div class="pagination">
+      <button [disabled]="currentPage === 0" (click)="prevPage()" class="btn btn-secondary">Previous</button>
+      <span>Page {{ currentPage + 1 }} of {{ totalPages }}</span>
+      <button [disabled]="currentPage >= totalPages - 1" (click)="nextPage()" class="btn btn-secondary">Next</button>
+    </div>
+  </div>
+  }
+
+  @if (!loading && loans.length === 0) {
+  <div class="no-data">
+    <p>No system loans found.</p>
+  </div>
+  }
+</div>

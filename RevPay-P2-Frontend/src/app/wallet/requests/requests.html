@@ -1,0 +1,72 @@
+<div class="container">
+  <h2>Money Requests</h2>
+
+  <div class="request-form-card">
+    <h3>Request Money</h3>
+    <form [formGroup]="requestForm" (ngSubmit)="onRequestMoney()">
+      <div class="form-row">
+        <div class="form-group half">
+          <label>Target Email</label>
+          <input title="Target Email" type="email" formControlName="targetEmail" placeholder="user@example.com">
+        </div>
+        <div class="form-group half">
+          <label>Amount</label>
+          <input title="Amount" type="number" formControlName="amount" placeholder="0.00">
+        </div>
+      </div>
+      <button type="submit" [disabled]="requestForm.invalid" class="btn-primary">Send Request</button>
+    </form>
+  </div>
+
+  <div class="requests-grid">
+    <div class="requests-column">
+      <h3>Incoming Requests</h3>
+      @if (incomingRequests.length === 0) {
+        <div class="no-data">No pending incoming requests.</div>
+      }
+
+      @for (req of incomingRequests; track req) {
+        <div class="req-card">
+          <div class="req-header">
+            <span>{{ req.description || 'From User ID: ' + req.senderId }}</span>
+            <span class="amount">₹{{ req.amount }}</span>
+          </div>
+          <div class="req-date">{{ req.timestamp | date:'short' }}</div>
+          @if (req.status === 'PENDING') {
+            <div class="req-actions">
+              <input title="Input" type="password" #pinInput placeholder="Enter PIN to Accept" class="pin-input">
+              <button (click)="acceptRequest(req.transactionId, pinInput.value)"
+              class="btn-sm btn-success">Accept</button>
+              <button (click)="declineRequest(req.transactionId)" class="btn-sm btn-danger">Decline</button>
+            </div>
+          }
+          @if (req.status !== 'PENDING') {
+            <div class="status-badge {{req.status}}">
+              {{req.status}}
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="requests-column">
+      <h3>Outgoing Requests</h3>
+      @if (outgoingRequests.length === 0) {
+        <div class="no-data">No pending outgoing requests.</div>
+      }
+
+      @for (req of outgoingRequests; track req) {
+        <div class="req-card">
+          <div class="req-header">
+            <span>To User ID: {{ req.receiverId }}</span>
+            <span class="amount">₹{{ req.amount }}</span>
+          </div>
+          <div class="req-date">{{ req.timestamp | date:'short' }}</div>
+          <div class="status-badge {{req.status}}">
+            {{req.status}}
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+</div>

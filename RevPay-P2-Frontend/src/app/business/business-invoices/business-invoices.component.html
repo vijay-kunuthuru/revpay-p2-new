@@ -1,0 +1,79 @@
+<div class="header">
+    <h2>Invoice Management</h2>
+    @if (isVerified) {
+    <button class="btn-primary" (click)="showCreateForm = !showCreateForm">
+        {{ showCreateForm ? 'Cancel' : 'Create Invoice' }}
+    </button>
+    }
+</div>
+
+@if (!isVerified) {
+<div class="alert alert-warning">
+    Your business profile is currently pending Admin approval or is suspended. You cannot manage invoices at this time.
+</div>
+} @else {
+
+@if (showCreateForm) {
+<div class="create-form-container">
+    <h3>New Invoice</h3>
+    <form [formGroup]="invoiceForm" (ngSubmit)="createInvoice()">
+        <div class="form-row">
+            <div class="form-group"><label>Customer Name</label><input placeholder="Customer Name" title="Customer Name" type="text" formControlName="customerName"></div>
+            <div class="form-group"><label>Customer Email</label><input placeholder="Customer Email" title="Customer Email" type="email" formControlName="customerEmail">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Total Amount (₹)</label><input placeholder="Total Amount" title="Total Amount" type="number" formControlName="totalAmount"
+                    step="0.01"></div>
+            <div class="form-group"><label>Due Date</label><input title="Due Date" type="date" formControlName="dueDate"></div>
+        </div>
+        <button type="submit" class="btn-success" [disabled]="invoiceForm.invalid">Save Invoice</button>
+    </form>
+</div>
+}
+
+<div class="table-container">
+    @if (invoices.length === 0) {
+    <p>No invoices found. Generate one to get started!</p>
+    } @else {
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Customer</th>
+                <th>Amount</th>
+                <th>Due Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for (inv of invoices; track inv.id) {
+            <tr>
+                <td>#{{ inv.id }}</td>
+                <td>{{ inv.customerName }}<br><small>{{ inv.customerEmail }}</small></td>
+                <td>₹{{ inv.totalAmount }}</td>
+                <td>{{ inv.dueDate }}</td>
+                <td><span class="badge" [ngClass]="inv.status">{{ inv.status }}</span></td>
+                <td class="actions">
+                    @if (inv.status === 'DRAFT') {
+                    <button class="btn-sm btn-info" (click)="sendInvoice(inv.id)">Send</button>
+                    }
+                    @if (inv.status === 'SENT' || inv.status === 'OVERDUE') {
+                    <button class="btn-sm btn-success" (click)="markPaid(inv.id)">Mark Paid</button>
+                    }
+                </td>
+            </tr>
+            }
+        </tbody>
+    </table>
+
+    <!-- Basic Pagination -->
+    <div class="pagination">
+        <button [disabled]="currentPage === 0" (click)="loadInvoices(currentPage - 1)">Previous</button>
+        <span>Page {{ currentPage + 1 }} of {{ totalPages }}</span>
+        <button [disabled]="currentPage >= totalPages - 1" (click)="loadInvoices(currentPage + 1)">Next</button>
+    </div>
+    }
+</div>
+}

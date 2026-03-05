@@ -1,0 +1,66 @@
+<div class="dashboard-header">
+  <h2>Business Dashboard</h2>
+  <p>Welcome to your business command center.</p>
+</div>
+
+@if (!isVerified) {
+  <div class="alert alert-warning">
+    Your business profile is pending Admin approval. Dashboard metrics may not fully populate until verified.
+  </div>
+}
+
+<div class="metrics-grid">
+  <!-- Analytics Stats -->
+  <div class="metric-card">
+    <h3>Total Revenue</h3>
+    <p class="value text-success">₹{{ summary?.totalReceived || 0 }}</p>
+  </div>
+  <div class="metric-card">
+    <h3>Total Paid / Expenses</h3>
+    <p class="value text-danger">₹{{ summary?.totalSent || 0 }}</p>
+  </div>
+  <div class="metric-card">
+    <h3>Pending Amounts</h3>
+    <p class="value text-warning">₹{{ summary?.pendingAmount || 0 }}</p>
+  </div>
+  <div class="metric-card">
+    <h3>Transactions</h3>
+    <p class="value text-primary">{{ summary?.totalTransactionCount || 0 }}</p>
+  </div>
+
+  <!-- Loan Stats -->
+  <div class="metric-card">
+    <h3>Total Outstanding Debt</h3>
+    <p class="value text-warning">₹{{ outstandingDebt }}</p>
+  </div>
+  <div class="metric-card">
+    <h3>Pending Loan Emis</h3>
+    <p class="value text-warning">₹{{ pendingEmis }}</p>
+  </div>
+  <div class="metric-card">
+    <h3>Latest Loan Status</h3>
+    <p class="value" [ngClass]="latestLoanStatus === 'APPROVED' ? 'text-success' : 'text-warning'">
+      {{ latestLoanStatus || 'No Active Loans' }}
+    </p>
+    @if (latestLoanStatus === 'PENDING') {
+      <p class="pending-approval-text">Waiting for Admin Approval</p>
+    }
+  </div>
+
+  <!-- Profile Status -->
+  <div class="metric-card">
+    <h3>Business Status</h3>
+    <p class="value" [ngClass]="isVerified ? 'text-success' : 'text-warning'">
+      {{ isVerified ? 'Verified' : 'Pending Verification' }}
+    </p>
+  </div>
+</div>
+
+<div class="dashboard-sections">
+  <div class="section-card">
+    <h3>Outstanding Invoices</h3>
+    <div class="placeholder-box">
+      <p><i>Invoice tracking module active. View Invoices tab for details.</i></p>
+    </div>
+  </div>
+</div>

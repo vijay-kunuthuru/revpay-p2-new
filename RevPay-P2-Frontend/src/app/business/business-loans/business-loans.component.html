@@ -1,0 +1,122 @@
+<div class="header">
+  <h2>Business Credit & Loans</h2>
+  @if (isVerified) {
+    <button class="btn-success" (click)="showApplyForm = !showApplyForm">
+      {{ showApplyForm ? 'Cancel Application' : 'Apply for Loan' }}
+    </button>
+  }
+</div>
+
+@if (!isVerified) {
+  <div class="alert alert-warning">
+    Your business profile is pending Admin approval. You cannot apply for loans yet.
+  </div>
+} @else {
+  <!-- Analytics Grid -->
+  <div class="analytics-grid">
+    <div class="stat-card">
+      <h4>Total Outstanding</h4>
+      <p class="amount">₹{{ (analytics?.totalOutstanding || 0) | number:'1.2-2' }}</p>
+    </div>
+    <div class="stat-card">
+      <h4>Total Paid</h4>
+      <p class="amount text-success">₹{{ (analytics?.totalPaid || 0) | number:'1.2-2' }}</p>
+    </div>
+    <div class="stat-card">
+      <h4>Pending Instalments</h4>
+      <p class="amount text-warning">₹{{ (analytics?.totalPending || 0) | number:'1.2-2' }}</p>
+    </div>
+  </div>
+
+  <!-- Apply Form -->
+  @if (showApplyForm) {
+    <div class="apply-form-container">
+      <h3>New Loan Application</h3>
+      <p class="help-text">Applying for a new credit line requires Admin approval. Interest rates are determined by the
+      platform based on profile verification.</p>
+      <form [formGroup]="loanForm" (ngSubmit)="applyForLoan()">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Amount (₹)</label>
+            <input placeholder="Amount" title="Amount" type="number" formControlName="amount" min="1000" max="1000000" step="100">
+            @if (loanForm.get('amount')?.invalid && loanForm.get('amount')?.touched) {
+              <span class="error-text"
+                >Minimum amount is
+              ₹1,000.</span>
+            }
+          </div>
+          <div class="form-group">
+            <label>Tenure (Months)</label>
+            <input placeholder="Tenure Months" title="Tenure Months" type="number" formControlName="tenureMonths" min="3" max="60">
+            @if (loanForm.get('tenureMonths')?.invalid && loanForm.get('tenureMonths')?.touched) {
+              <span class="error-text"
+                >Tenure must
+              be between 3 and 60 months.</span>
+            }
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Purpose</label>
+            <input title="Purpose" type="text" formControlName="purpose" placeholder="E.g., Equipment purchase, working capital">
+            @if (loanForm.get('purpose')?.invalid && loanForm.get('purpose')?.touched) {
+              <span class="error-text"
+                >Purpose is
+              required.</span>
+            }
+          </div>
+          <div class="form-group">
+            <label>Loan Type</label>
+            <select title="Loan Type" formControlName="loanType">
+              <option value="WORKING_CAPITAL">Working Capital</option>
+              <option value="EXPANSION">Business Expansion</option>
+              <option value="EQUIPMENT">Equipment Finance</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary" [disabled]="loanForm.invalid">Submit Application</button>
+      </form>
+    </div>
+  }
+
+  <!-- My Loans List -->
+  <div class="loans-list-container">
+    <h3>Active / Past Loans</h3>
+    @if (loans.length === 0) {
+      <p>You have no loan history.</p>
+    } @else {
+      <div class="loan-cards">
+        @for (loan of loans; track loan.loanId) {
+          <div class="loan-card">
+            <div class="loan-header">
+              <h5>{{ loan.purpose }}</h5>
+              <span class="badge" [ngClass]="loan.status">{{ loan.status }}</span>
+            </div>
+            <div class="loan-details">
+              <p><strong>Amount:</strong> ₹{{ loan.amount | number:'1.2-2' }}</p>
+              <p><strong>Approved Rate:</strong> {{ loan.interestRate ? loan.interestRate + '%' : 'Pending Approval'
+            }}</p>
+            <p><strong>Tenure:</strong> {{ loan.tenureMonths }} months</p>
+            @if (['APPROVED', 'ACTIVE'].includes(loan.status)) {
+              <p><strong>Monthly EMI:</strong> ₹{{ loan.emiAmount
+            | number:'1.2-2' }}</p>
+          }
+          @if (['APPROVED', 'ACTIVE'].includes(loan.status)) {
+            <p><strong>Remaining Balance:</strong> ₹{{
+          loan.remainingAmount | number:'1.2-2' }}</p>
+        }
+      </div>
+      @if (['APPROVED', 'ACTIVE'].includes(loan.status) && loan.remainingAmount > 0) {
+        <div class="repayment-actions">
+          <button class="btn-sm btn-repay" (click)="repayEmi(loan.loanId, loan.emiAmount)">Pay Monthly EMI (₹{{
+          loan.emiAmount | number:'1.2-2' }})</button>
+          <button class="btn-sm btn-preclose" (click)="precloseLoan(loan.loanId, loan.remainingAmount)">Preclose
+          Loan</button>
+        </div>
+      }
+    </div>
+  }
+</div>
+}
+</div>
+}

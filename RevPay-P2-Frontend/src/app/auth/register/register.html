@@ -1,0 +1,41 @@
+<div class="container">
+    <h2>Register</h2>
+    <form [formGroup]="registerForm" (ngSubmit)="onSubmit()">
+        <div class="form-group"><label>Full Name</label><input placeholder="Full Name" title="Full Name" type="text" formControlName="fullName"></div>
+        <div class="form-group"><label>Email</label><input placeholder="Email" title="Email" type="email" formControlName="email"></div>
+        <div class="form-group"><label>Phone Number</label><input placeholder="Phone Number" title="Phone Number" type="text" formControlName="phoneNumber"></div>
+        <div class="form-group"><label>Password</label><input placeholder="Password" title="Password" type="password" formControlName="password"></div>
+        <div class="form-group"><label>Transaction PIN (4-6 digits)</label><input placeholder="Transaction Pin" title="Transaction Pin" type="password"
+                formControlName="transactionPin"></div>
+
+        <div class="form-group">
+            <label>Role</label>
+            <select title="Role" formControlName="role">
+                <option value="PERSONAL">Personal</option>
+                <option value="BUSINESS">Business</option>
+            </select>
+        </div>
+
+        @if (registerForm.get('role')?.value === 'BUSINESS') {
+        <div class="business-fields">
+            <h4 class="business-details-header">Business Details</h4>
+            <div class="form-group"><label>Company Name</label><input placeholder="Business Name" title="Business Name" type="text" formControlName="businessName"></div>
+            <div class="form-group"><label>Business Type</label><input title="Business Type" type="text" formControlName="businessType"
+                    placeholder="e.g. Retail, Tech, Services"></div>
+            <div class="form-group"><label>Tax ID / GSTIN</label><input placeholder="Tax Id" title="Tax Id" type="text" formControlName="taxId"></div>
+            <div class="form-group"><label>Registered Address</label><input placeholder="Address" title="Address" type="text" formControlName="address"></div>
+        </div>
+        }
+
+        <div class="form-group">
+            <label>Security Question</label>
+            <input title="Security Question" type="text" formControlName="securityQuestion" placeholder="E.g. What is your pet's name?">
+        </div>
+        <div class="form-group">
+            <label>Security Answer</label>
+            <input placeholder="Security Answer" title="Security Answer" type="text" formControlName="securityAnswer">
+        </div>
+
+        <button type="submit" [disabled]="registerForm.invalid">Register</button>
+    </form>
+</div>

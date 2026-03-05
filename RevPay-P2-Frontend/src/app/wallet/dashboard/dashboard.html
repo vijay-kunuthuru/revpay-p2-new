@@ -1,0 +1,99 @@
+<div class="dashboard container my-5">
+  <div class="dashboard-header d-flex justify-content-between align-items-center mb-4">
+    <h2 class="m-0 fw-bold">Dashboard</h2>
+  </div>
+
+  <!-- Balance Card Premium Enhancement -->
+  <div class="card premium-balance-card mb-4 text-white shadow-lg border-0">
+    <div class="card-body p-5">
+      <h4 class="fw-normal mb-2 balance-label">Current Balance</h4>
+      <h1 class="display-4 fw-bold m-0 balance-amount">₹{{ balance | number:'1.2-2' }}</h1>
+    </div>
+  </div>
+
+  <div class="actions d-flex gap-3 mb-5">
+    <button (click)="showAddFunds = !showAddFunds" class="btn btn-success btn-lg flex-fill shadow-sm fw-bold">
+      <i class="fas fa-plus-circle me-2"></i> Add Funds
+    </button>
+    <button routerLink="/send-money" class="btn btn-primary btn-lg flex-fill shadow-sm fw-bold">
+      <i class="fas fa-paper-plane me-2"></i> Send Money
+    </button>
+  </div>
+
+  <!-- ADD FUNDS FORM -->
+  @if (showAddFunds) {
+    <div class="add-funds-panel card border-0 shadow-sm mb-5">
+      <div class="card-body p-4">
+        <h4 class="text-success mb-4 fw-bold"><i class="fas fa-wallet me-2"></i>Deposit Money to Wallet</h4>
+        @if (cards.length > 0) {
+          <form [formGroup]="addFundsForm" (ngSubmit)="onAddFunds()">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Amount to Deposit (₹)</label>
+              <input title="Amount" type="number" formControlName="amount" class="form-control form-control-lg"
+                placeholder="e.g. 500.00">
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-bold">Select Funding Source</label>
+                <select title="Card Id" formControlName="cardId" class="form-select form-select-lg">
+                  <option value="">-- Choose a Saved Card --</option>
+                  @for (card of cards; track card) {
+                    <option [value]="card.id">
+                      {{ card.cardType }} ending in {{ card.partialCardNumber }}
+                    </option>
+                  }
+                </select>
+              </div>
+              <div class="mb-4">
+                <label class="form-label fw-bold">Description (Optional)</label>
+                <input title="Description" type="text" formControlName="description" class="form-control"
+                  placeholder="E.g. Monthly Savings Transfer">
+                </div>
+                <button type="submit" [disabled]="addFundsForm.invalid"
+                  class="btn btn-success btn-lg w-100 fw-bold">
+                  Confirm Deposit <i class="fas fa-check-circle ms-2"></i>
+                </button>
+              </form>
+            } @else {
+              <div class="no-cards-msg text-center p-5 bg-light rounded border border-warning">
+                <i class="fas fa-exclamation-triangle text-warning fs-1 mb-3"></i>
+                <h5 class="fw-bold mb-3">No Payment Methods Found</h5>
+                <p class="text-muted mb-4">You need to link a credit or debit card before you can deposit funds into
+                your RevPay wallet.</p>
+                <button routerLink="/cards" class="btn btn-primary btn-lg px-4"><i
+                class="fas fa-credit-card me-2"></i> Link a Card Now</button>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <h3 class="fw-bold mb-4">Recent Transactions</h3>
+      <div class="card border-0 shadow-sm">
+        <ul class="list-group list-group-flush rounded">
+          @if (transactions.length === 0) {
+            <li
+              class="list-group-item text-center text-muted p-5 bg-light empty-txn-item">
+              <i class="fas fa-receipt fs-2 mb-3 text-secondary empty-icon"></i><br>
+              No recent transactions found.
+            </li>
+          }
+          @for (txn of transactions; track txn) {
+            <li
+              class="list-group-item txn-item p-3 d-flex justify-content-between align-items-center">
+              <div class="d-flex align-items-center">
+                <span class="badge rounded-pill me-3 px-3 py-2" [ngClass]="txn.type">{{ txn.type }}</span>
+                <span class="fw-medium text-dark">{{ sanitizeDescription(txn.description) }}</span>
+              </div>
+              <div [class.text-success]="!isOutgoing(txn)" [class.text-danger]="isOutgoing(txn)" class="fw-bold fs-5">
+                {{ isOutgoing(txn) ? '-' : '+' }}₹{{ abs(txn.amount) | number:'1.2-2' }}
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+
+      <div class="text-center mt-4 mb-5">
+        <a routerLink="/transactions" class="btn btn-outline-primary fw-bold px-4 rounded-pill">View Full History <i
+        class="fas fa-arrow-right ms-2"></i></a>
+      </div>
+    </div>
