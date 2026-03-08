@@ -29,17 +29,18 @@ jobs:
 
     - name: Build backend
       working-directory: revpay
-      run: mvn -B clean package -DskipTests
+      run: mvn -B clean package -DskipTests -X
 
     - name: Build frontend
       uses: actions/setup-node@v3
       with:
-        node-version: '18'
+        node-version: '24'
+
     - name: Install and build Angular
       working-directory: RevPay-P2-Frontend
       run: |
-        npm ci
-        npm run build -- --configuration production
+        npm install --verbose
+        npm run build -- --configuration production --verbose
 
   deploy:
     if: github.event_name == 'workflow_dispatch'
@@ -49,6 +50,17 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
+    - name: Validate EC2 secrets are configured
+      run: |
+        if [ -z "${{ secrets.EC2_SSH_KEY }}" ] || [ -z "${{ secrets.EC2_USER }}" ] || [ -z "${{ secrets.EC2_HOST }}" ]; then
+          echo "ERROR: EC2 secrets not configured!"
+          echo "Please add the following secrets to your GitHub repository:"
+          echo "  - EC2_SSH_KEY: Your EC2 private key (PEM file content)"
+          echo "  - EC2_USER: SSH username (usually 'ubuntu')"
+          echo "  - EC2_HOST: EC2 public IP or DNS name"
+          exit 1
+        fi
+
     - name: Copy SSH key
       uses: webfactory/ssh-agent@v0.7.0
       with:
@@ -56,4 +68,6 @@ jobs:
 
     - name: Deploy to EC2
       run: |
+        echo "Deploying to EC2 instance: ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}"
         ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} 'bash -s' < deploy.sh
+        echo "Deployment complete!"
