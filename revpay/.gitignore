@@ -37,4 +37,3 @@ logs/
 *.gz
 
 # Local Configuration Secrets
-application-local.properties
