@@ -1,4 +1,4 @@
 export const environment = {
   production: false,
-  apiUrl: window.location.hostname === 'localhost' ? 'http://localhost:8080/api/v1' : `http://${window.location.hostname}:8080/api/v1`
+  apiUrl: '/api/v1'  // relative path; nginx will forward to backend
 };
